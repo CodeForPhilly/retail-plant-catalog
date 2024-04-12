@@ -1,0 +1,15 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "LogDirectory": "/Users/martin/tmp/log",
+  "AllowedHosts": "*",
+  "ConnectionStrings": {
+    "app": "Server=127.0.0.1;Port=3306;Database=pac;Uid=;Pwd=;SslMode=none;"
+  },
+  "amazonAccess": "",
+  "amazonSecret": ""
+}
