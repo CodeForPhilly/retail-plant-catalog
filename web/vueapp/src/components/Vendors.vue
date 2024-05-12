@@ -3,10 +3,16 @@
         <div v-if="loading" class="loading">
             Loading... 
         </div>
-        <h1>Vendors</h1>
+        <h1>Vendors  <a @click="add()" title="Add Vendor"><span class="material-symbols-outlined">
+              add_box
+             </span></a></h1>
+       
         <div id="controls">
+            <input type="text" id="search" v-model="storeName" @keyup="fetchData()" placeholder="Search..." />
+          
             <label><input type="checkbox" v-model="unapprovedOnly" @change="fetchData()"/>Show Only Unapproved?</label>
-            <select v-model="state" @change="fetchData()">
+            <label style="padding-left:10px"><input type="checkbox" v-model="showDeleted" @change="fetchData()"/>Show Deleted?</label><br />
+            <select v-model="state" @change="fetchData()" id="stateFilter">
                 <option value="ALL">Filter by State</option>
                 <option value="AL">Alabama</option>
                 <option value="AK">Alaska</option>
@@ -111,6 +117,16 @@
     </div>
 </template>
 <style>
+    #stateFilter{
+        float:left !important;
+        font-family: sans-serif;
+        padding:5px 15px;
+        border-radius:5px;
+
+    }
+    #search{
+        float:right;
+    }
     th a:hover{
         text-decoration: underline;
         cursor: pointer;
@@ -140,7 +156,9 @@
                 loading: false,
                 post: null,
                 unapprovedOnly: false,
+                showDeleted: false,
                 state: "ALL",
+                storeName: "",
                 sortBy: "StoreName",
                 sortAsc: true,
                 pagenumber:0,
@@ -167,7 +185,7 @@
                 this.loading = true;
                 var skip = this.pagenumber * this.paging
 
-                await utils.getData(`vendor/search?skip=${skip}&take=${this.paging}&state=${this.state}&unapprovedOnly=${this.unapprovedOnly}&sortBy=${this.sortBy}&sortAsc=${this.sortAsc}`)
+                await utils.getData(`vendor/search?storeName=${this.storeName}&skip=${skip}&take=${this.paging}&state=${this.state}&showDeleted=${this.showDeleted}&unapprovedOnly=${this.unapprovedOnly}&sortBy=${this.sortBy}&sortAsc=${this.sortAsc}`)
                     .then(json => {
                         this.post = json;
                         this.count = this.post.length;
@@ -178,6 +196,9 @@
                         this.loading = false;
                         return;
                     });
+            },
+            add(){
+                window.location = `/#/vendor-registration`
             },
             edit(id){
                 //figure out how to load an id into vendor registration

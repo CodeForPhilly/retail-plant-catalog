@@ -6,7 +6,7 @@
         <div class="form-holder">
             <p><em class="info">May take up to 72 hours before your listing is approved or denied</em>
             </p>
-            
+            <label><input type="checkbox" v-model="vendor.allNative" />All Native Nursery?</label><br />
             <label> <input type="text" placeholder="Store Name" v-model="vendor.storeName"/></label><br /> 
            <label>
             <GooglePlacesInput :address="vendor.address" v-on:placeChange="vendor.lat=$event.lat;vendor.lng=$event.lng;vendor.address=$event.address;vendor.state=$event.state"/>
@@ -52,11 +52,12 @@
                 </li>
                 </ul>
            </div>
-          
-           <input type="button" class="primary-btn" @click="submit()" v-if="!vendor.id" value="Submit for Approval" />
-           <input type="button" class="primary-btn" @click="crawl()" v-if="role == 'Admin'" :disabled="crawlInProgress" value="Crawl Site(s)" />
+           <textarea v-model="vendor.notes" placeholder="Notes">
+           </textarea><br />
+           <input type="button" class="primary-btn" @click="submit()" v-if="!(vendor.id || role == 'Admin')" value="Submit for Approval" />
+           <input type="button" class="primary-btn" @click="crawl()" v-if="role == 'Admin' && vendor.id" :disabled="crawlInProgress" value="Crawl Site(s)" />
            <img src="/loading.gif" alt="crawl in progress" v-if="crawlInProgress" width="30" height="30" style="position:relative;top:5px;left:5px"/>
-           <input type="button" class="primary-btn save" :disabled="crawlInProgress" @click="submit()" v-if="vendor.id" value="Save" />
+           <input type="button" class="primary-btn save" :disabled="crawlInProgress" @click="submit()" v-if="vendor.id || role == 'Admin'" value="Save" />
            <br /><em v-if="crawlInProgress">Crawl in progress.  May take up to 5 minutes.  Save disabled while crawl in progress</em>
         </div>
 
@@ -233,6 +234,9 @@
     });
 </script>
 <style scoped>
+input[type="checkbox"]{
+    margin-left:20px;
+}
 .form-holder{
     background: #EBECF0 0% 0% no-repeat padding-box;
     border-radius: 10px;

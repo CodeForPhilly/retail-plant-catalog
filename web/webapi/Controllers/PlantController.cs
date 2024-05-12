@@ -49,6 +49,9 @@ public class PlantController : BaseController
         if (zip == null) return new List<VendorPlus> { };
         return plantRepository.FindVendorsForPlantId(plantId, zip.Lat, zip.Lng, meters);
     }
+   
+
+
     /// <summary>
     /// Find vendors for plants by name and location
     /// </summary>
@@ -59,7 +62,7 @@ public class PlantController : BaseController
     [ApiAuthorize]
     [HttpGet]
     [Route("FindVendorsForPlantName")]
-    public IEnumerable<VendorPlus> FindVendorsForPlantName([FromQuery] string plantName, [FromQuery] string zipCode, [FromQuery] int radius)
+    public IEnumerable<VendorPlus> FindVendorsForPlantName([FromQuery] string plantName, [FromQuery] string zipCode, [FromQuery] int radius, [FromQuery]int limit=20)
     {
         var plants = FindByName(plantName);
         var vendors = new List<VendorPlus>();
@@ -67,7 +70,7 @@ public class PlantController : BaseController
         {
             vendors.AddRange(FindVendorsForPlantId(plant.Id, zipCode, radius));
         }
-        return vendors.DistinctBy(v => v.Id).OrderBy(v => v.Distance); 
+        return vendors.Take(limit).DistinctBy(v => v.Id).OrderBy(v => v.Distance); 
     }
     /// <summary>
     /// Finds all plants by vendor.  See Vendor methods in order to get id

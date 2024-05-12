@@ -34,8 +34,8 @@ public class PlantRepository : Repository<Plant>
 
     public IEnumerable<VendorPlus> FindVendorsForPlantId(string plantId, double lat, double lng, int radius)
     {
-        var point = $"POINT({lat}, {lng})";
-        var sql = $"SELECT ST_DISTANCE_SPHERE({point}, Geo) / 1000 distance, v.* FROM vendor v inner join vendor_plant vp on vp.VendorId = v.Id WHERE v.Approved and vp.PlantId = @plantId and ST_DISTANCE_SPHERE({point}, Geo) <= @radius order by distance;";
+        var point = $"POINT({lng}, {lat})";
+        var sql = $"SELECT ST_DISTANCE_SPHERE({point}, Geo) / 1000 distance, v.* FROM vendor v inner join vendor_plant vp on vp.VendorId = v.Id WHERE v.Approved and not v.IsDeleted and vp.PlantId = @plantId and ST_DISTANCE_SPHERE({point}, Geo) <= @radius order by distance;";
         return conn.Query<VendorPlus>(sql, new { radius, lat, lng, plantId });
 
     }

@@ -1,0 +1,2 @@
+ALTER TABLE `vendor` ADD `IsDeleted` BIT  NOT NULL  DEFAULT 0  AFTER `Id`;
+

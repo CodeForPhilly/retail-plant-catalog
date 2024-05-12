@@ -16,14 +16,15 @@ public class VendorRepository : Repository<Vendor>
         vendor.PlantListingUrls = conn.Query<string>("select Uri from vendor_urls where VendorId = @vendorId", new { vendorId = vendor.Id }).ToArray();
         return vendor;
     }
-    public IEnumerable<Vendor> Find(bool unapprovedOnly, string state, string sortBy, int skip, int take)
+    public IEnumerable<Vendor> Find(bool unapprovedOnly, bool showDeleted, string state, string sortBy, int skip, int take)
     {
+        var deleteConstraint = showDeleted ? "1=1" : "IsDeleted = false";
         string stateConstraint = " 1=1";
         if (state != "ALL")
             stateConstraint = " State = @state ";
         if (unapprovedOnly)
-            return conn.Query<Vendor>($"select * from vendor where Approved = false and {stateConstraint} order by {sortBy} limit @skip, @take", new { skip, take, state });
-        return conn.Query<Vendor>($"select * from vendor where {stateConstraint} order by {sortBy} limit @skip, @take", new { skip, take, state });
+            return conn.Query<Vendor>($"select * from vendor where Approved = false and {deleteConstraint} and {stateConstraint} order by {sortBy} limit @skip, @take", new { skip, take, state });
+        return conn.Query<Vendor>($"select * from vendor where {stateConstraint} and {deleteConstraint} order by {sortBy} limit @skip, @take", new { skip, take, state });
     }
 
     public override long Insert(Vendor obj)
@@ -32,8 +33,8 @@ public class VendorRepository : Repository<Vendor>
         if (obj.Id == null)
             obj.Id = Guid.NewGuid().ToString();
         string point = $"POINT({obj.Lat}, {obj.Lng})";
-        var recordsAffected = conn.Execute("insert into vendor (Id, UserId, StoreName,  Lat, Lng, Geo,Approved, Address, State, StoreUrl, PublicEmail, PublicPhone, PlantCount, CreatedAt)" +
-            $" values (@Id, @UserId, @StoreName, @Lat, @Lng, {point}, @Approved,@Address, @State,@StoreUrl, @PublicEmail, @PublicPhone, @PlantCount, @CreatedAt)", obj);
+        var recordsAffected = conn.Execute("insert into vendor (Id, UserId, StoreName,  Lat, Lng, Geo,Approved, Address, AllNative, State, StoreUrl, PublicEmail, PublicPhone, PlantCount, CreatedAt, Notes)" +
+            $" values (@Id, @UserId, @StoreName, @Lat, @Lng, {point}, @Approved,@Address,@AllNative, @State,@StoreUrl, @PublicEmail, @PublicPhone, @PlantCount, @CreatedAt, @Notes)", obj);
         ClearAndInsertUrls(obj.Id, obj.PlantListingUrls);
         return recordsAffected;
     }
@@ -42,27 +43,34 @@ public class VendorRepository : Repository<Vendor>
         ClearAndInsertUrls(obj.Id, obj.PlantListingUrls);
         string  point = $"POINT({obj.Lng}, {obj.Lat})";
 
-        conn.Execute($"update vendor set StoreName=@StoreName, Address=@Address, Lng=@Lng, Lat=@Lat, Geo={point}, StoreUrl=@StoreUrl, PublicEmail=@PublicEmail, PublicPhone=@PublicPhone, Approved=@Approved, PlantCount=@PlantCount where id = @Id", obj);
+        conn.Execute($"update vendor set StoreName=@StoreName, Address=@Address, Lng=@Lng, Lat=@Lat, Geo={point}, StoreUrl=@StoreUrl, PublicEmail=@PublicEmail, PublicPhone=@PublicPhone, Approved=@Approved, PlantCount=@PlantCount, AllNative=@AllNative, Notes=@Notes where id = @Id", obj);
         return true;
     }
-
-    public IEnumerable<Vendor> Find(string? storeName, string state, bool unapprovedOnly, string sortBy, bool sortAsc, int skip, int take)
+    
+    public IEnumerable<Vendor> Find(string? storeName, string state, bool unapprovedOnly, bool showDeleted, string sortBy, bool sortAsc, int skip, int take)
     {
+        var deleteConstraint = showDeleted ? "1=1" : "IsDeleted = false";
         sortBy = $"{sortBy}" + (sortAsc ? "" : " desc");
-        if (string.IsNullOrEmpty(storeName)) return Find(unapprovedOnly,state, sortBy, skip, take);
+        if (string.IsNullOrEmpty(storeName)) return Find(unapprovedOnly, showDeleted, state, sortBy, skip, take);
         string stateConstraint = "";
         if (state != "ALL")
             stateConstraint = " and State = @state ";
         storeName = $"%{storeName}%";
         if (unapprovedOnly)
-            return conn.Query<Vendor>($"select * from vendor where StoreName like @storeName {stateConstraint} and Approved = false order by {sortBy} limit @skip, @take", new { storeName, skip, take, state });
-        return conn.Query<Vendor>($"select * from vendor where StoreName like @storeName {stateConstraint} order by {sortBy} limit @skip, @take", new { storeName, skip, take, state });
+            return conn.Query<Vendor>($"select * from vendor where StoreName like @storeName {stateConstraint} and Approved = false and {deleteConstraint} order by {sortBy} limit @skip, @take", new { storeName, skip, take, state });
+        return conn.Query<Vendor>($"select * from vendor where StoreName like @storeName and {deleteConstraint} {stateConstraint} order by {sortBy} limit @skip, @take", new { storeName, skip, take, state });
     }
 
     public void Approve(string id, bool approved)
     {
         var rowsAffected = conn.Execute("update vendor set Approved = @approved where Id = @id", new { id, approved });
 
+    }
+
+     public int Delete(string id, bool deleteStatus = true)
+    {
+        var rowsAffected = conn.Execute("update vendor set IsDeleted = @deleteStatus where Id = @id", new { id, deleteStatus });
+        return rowsAffected;
     }
 
     private void ClearAndInsertUrls(string? vendorId, string[] urls)
@@ -80,31 +88,44 @@ public class VendorRepository : Repository<Vendor>
 
     public Vendor? FindByUserId(string userId)
     {
-        var vendor = conn.QueryFirstOrDefault<Vendor>("select * from vendor where UserId = @userId", new { userId });
+        var vendor = conn.QueryFirstOrDefault<Vendor>("select * from vendor where UserId = @userId and IsDeleted = false", new { userId });
         if (vendor == null) return null;
         vendor.PlantListingUrls = conn.Query<string>("select Uri from vendor_urls where VendorId = @vendorId", new { vendorId = vendor.Id }).ToArray();
         return vendor;
     }
 
     public IEnumerable<VendorPlus> FindByRadius(double lng, double lat, int radius = 10000){ // 10km
-        var point = $"POINT({lat}, {lng})";
+        var point = $"POINT({lng}, {lat})";
         /*
         SELECT ST_DISTANCE_SPHERE(POINT(33.5207,  -86.8025), Geo) / 1000 distance, lat, lng,  address, storename
         FROM vendor
         WHERE ST_DISTANCE_SPHERE(POINT(33.5207, -86.8025), Geo) <= 50000
         order by distance;
         */
-        return conn.Query<VendorPlus>($"SELECT ST_DISTANCE_SPHERE({point}, Geo) / 1000 distance, v.* FROM vendor v WHERE v.Approved and ST_DISTANCE_SPHERE({point}, Geo) <= @radius order by distance;", new { radius, lat, lng });
+        return conn.Query<VendorPlus>($"SELECT ST_DISTANCE_SPHERE({point}, Geo) / 1000 distance, v.* FROM vendor v WHERE v.Approved and not v.IsDeleted and ST_DISTANCE_SPHERE({point}, Geo) <= @radius order by distance;", new { radius, lat, lng });
+    }
+
+    public ZipCode? NearestZip(double lng, double lat)
+    {
+        var point = $"POINT({lng}, {lat})";
+        /*
+        SELECT `Code`, City, State, ST_DISTANCE_SPHERE(POINT( -86.7461, 33.42872), Geo) / 1000 distance FROM zip 
+        WHERE ST_DISTANCE_SPHERE(POINT( -86.7461, 33.42872), Geo) / 1000 <= 10
+        order by distance 
+        */
+        var sql = $"SELECT `Code`, City, State, ST_DISTANCE_SPHERE({point}, Geo) / 1000 distance FROM zip WHERE ST_DISTANCE_SPHERE({point}, Geo) / 1000 <= 10 order by distance;";
+        return conn.QueryFirstOrDefault<ZipCode>(sql);
+
     }
 
     public IEnumerable<Vendor> FindByState(string state)
     {
-        return conn.Query<Vendor>("select * from vendor v where Approved and state = @state order by StoreName", new { state });
+        return conn.Query<Vendor>("select * from vendor v where Approved and not IsDeleted and state = @state order by StoreName", new { state });
     }
 
     public IEnumerable<Vendor> FindByPlant(string plantName)
     {
         var term = $"%{plantName}%";
-        return conn.Query<Vendor>("select * from vendor v inner join vendor_plant vp on vp.VendorId = v.Id inner join plant p on p.id = vp.PlantId where v.Approved and p.ScientificName like @term or p.CommonName like @term", new { term });
+        return conn.Query<Vendor>("select * from vendor v inner join vendor_plant vp on vp.VendorId = v.Id inner join plant p on p.id = vp.PlantId where v.Approved and not v.IsDeleted and p.ScientificName like @term or p.CommonName like @term", new { term });
     }
 }

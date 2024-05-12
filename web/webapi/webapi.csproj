@@ -41,6 +41,7 @@
   </ItemGroup>
   <ItemGroup>
     <Content Remove="wwwroot\" />
+    <Content Remove="appsettings.json" />
   </ItemGroup>
   
   <ItemGroup>

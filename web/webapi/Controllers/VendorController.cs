@@ -60,9 +60,9 @@ public class VendorController : BaseController
         logger.Info("Vendor creating", vendor);
         if (vendor.Id == null || vendor.Id == Guid.Empty.ToString())
             vendor.Id = Guid.NewGuid().ToString();
-        vendor.Approved = false;
         vendor.UserId = UserId;
         var user = userRepository.Get(UserId);
+        vendor.Approved = user.RoleEnum == UserType.Admin;
         if (user.RoleEnum == UserType.User)
         {
             user.RoleEnum = UserType.Vendor;
@@ -86,6 +86,7 @@ public class VendorController : BaseController
         existingVendor.StoreUrl = vendor.StoreUrl;
         existingVendor.PlantListingUrls = vendor.PlantListingUrls;
         existingVendor.Address = vendor.Address;
+        existingVendor.AllNative = vendor.AllNative;
         existingVendor.Lat = vendor.Lat;
         existingVendor.Lng = vendor.Lng;
         vendorRepository.Update(existingVendor);
@@ -144,9 +145,9 @@ public class VendorController : BaseController
     [ApiExplorerSettings(GroupName = "v2")]
     [Authorize(Roles = "Admin")]
     [Route("Search")]
-    public IEnumerable<Vendor> Search(string? storeName, string state, string sortBy="StoreName", bool sortAsc=true, int skip = 0, int take = 20, bool unapprovedOnly=false)
+    public IEnumerable<Vendor> Search(string? storeName, string state, string sortBy="StoreName", bool sortAsc=true, int skip = 0, int take = 20, bool unapprovedOnly=false, bool showDeleted = false)
     {
-        return vendorRepository.Find(storeName, state, unapprovedOnly, sortBy, sortAsc, skip, take);
+        return vendorRepository.Find(storeName, state, unapprovedOnly, showDeleted, sortBy, sortAsc, skip, take);
     }
 
     [HttpPost]
@@ -211,11 +212,27 @@ public class VendorController : BaseController
         var vendor = vendorRepository.Get(id);
         if (vendor != null)
         {
-            vendorRepository.Delete(vendor);
+            vendorRepository.Delete(id, true);
             return true;
         }
         return false;
     }
+
+    [HttpPost]
+    [ApiExplorerSettings(GroupName = "v2")]
+    [Authorize(Roles = "Admin")]
+    [Route("UnDelete")]
+    public bool UnDelete(string id)
+    {
+        var vendor = vendorRepository.Get(id);
+        if (vendor != null)
+        {
+            vendorRepository.Delete(id, false);
+            return true;
+        }
+        return false;
+    }
+
 
     /// <summary>
     /// Find vendors by location
@@ -232,6 +249,27 @@ public class VendorController : BaseController
         var meters = (int)(radius * 1609.34);
         return vendorRepository.FindByRadius(lng, lat, meters);
     }
+
+    [ApiAuthorize]
+    [ApiExplorerSettings(GroupName = "v2")]
+    [HttpGet]
+    [Route("FindZip")]
+    public ZipCode? FindZip([FromQuery] double lat, [FromQuery] double lng)
+    {
+        return vendorRepository.NearestZip(lng, lat);
+    }
+    [ApiAuthorize]
+    [ApiExplorerSettings(GroupName = "v2")]
+    [HttpGet]
+    [Route("FindCity")]
+    public ZipCode? FindCity([FromQuery] string zipCode)
+    {
+        return zipRepository.GetZipCode(zipCode);
+    }
+
+
+
+
     /// <summary>
     /// Find Vendors by State
     /// </summary>

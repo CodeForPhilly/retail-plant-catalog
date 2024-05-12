@@ -26,14 +26,23 @@ namespace Shared
 
         public string PublicPhone { get; set; } = "";
 
+        /// <summary>
+        /// If true, then this nursery has a commitment to only carry native plants to their state.
+        /// </summary>
+        public bool AllNative { get; set; } = false;
+
         public bool Approved { get; set; }
 
         public int PlantCount { get; set; }
+
+        public string Notes { get; set; } = "";
 
         [Computed]
         public string[] PlantListingUrls { get; set; } = new string[] { };
 
         public DateTime CreatedAt { get; set; }
+
+        public bool IsDeleted {get;set;}
 
     }
 
