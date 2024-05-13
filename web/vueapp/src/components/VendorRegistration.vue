@@ -41,7 +41,7 @@
                 </ul>
            </div>
            <label class="tos" v-if="!vendor.id">
-            <input type="checkbox"  v-model="agreeToTerms" />I agree to the <a href="#">Terms of Service</a>
+            <input type="checkbox"  v-model="agreeToTerms" v-if="role != 'Admin'" />I agree to the <a href="#">Terms of Service</a>
            </label>
            <div id="plants">
             Native Plants Detected [{{ plants.length }}]
