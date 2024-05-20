@@ -13,7 +13,7 @@
             <span class="location">({{ vendor.lat }}, {{ vendor.lng }})</span>
          
            </label>  <br />  
-           <label> <input type="text" placeholder="Store Url" v-model="vendor.storeUrl"/></label>   <br /> 
+           <label> <input type="text" placeholder="Store Url" v-on:blur="prependHttp()" v-model="vendor.storeUrl"/></label>   <br /> 
            <label> <input type="text" placeholder="Public Email" v-model="vendor.publicEmail"/></label>   <br /> 
            <label><VuePhoneNumberInput v-model="vendor.publicPhone" placeholder="Public Phone" :only-countries="countries"/></label>
            <label> <input type="text" placeholder="Plant Listing Url" v-model="plantListingUrl"/></label>    
@@ -40,8 +40,8 @@
                     <li v-for="error in errors" v-bind:key="error"> {{ error }}</li>
                 </ul>
            </div>
-           <label class="tos" v-if="!vendor.id">
-            <input type="checkbox"  v-model="agreeToTerms" v-if="role != 'Admin'" />I agree to the <a href="#">Terms of Service</a>
+           <label class="tos" v-if="!vendor.id && role != 'Admin'">
+            <input type="checkbox"  v-model="agreeToTerms" />I agree to the <a href="#">Terms of Service</a>
            </label>
            <div id="plants">
             Native Plants Detected [{{ plants.length }}]
@@ -101,18 +101,23 @@
                errors:[]
             };
         },
-        async created() {
+        async mounted() {
             //get vendor for current user, if exists
+            console.log("Mounted!")
             var hash = window.location.hash.split('?')
             var id = hash.length > 1 ?  hash[1].split("=")[1] : null;
             this.role = localStorage.getItem('role');
-            if (this.role == 'Admin' && id != null)
+            console.log("Role", this.role)
+          
+            if (this.role == 'Admin' )
             {
-                await utils.getData(`/vendor/get?id=${id}`)
-                .then(json => {
-                    console.log(json)
-                    this.vendor = json;
-                });
+                if (id != null){
+                    await utils.getData(`/vendor/get?id=${id}`)
+                    .then(json => {
+                        console.log(json)
+                        this.vendor = json;
+                    });
+                }
             }else{
                 await utils.getData("/vendor/current")
                 .then(json => {
@@ -154,14 +159,18 @@
             closeError(){
                 this.error = ""
             },
+            prependHttp(){
+                if (this.vendor.storeUrl && this.vendor.storeUrl.indexOf("http") < 0)
+                    this.vendor.storeUrl = "https://" + this.vendor.storeUrl;
+            },
             async validate(){
                 console.log("validate", this.vendor)
                 this.errors = [];
                 //determine if fields are invalid
                  if (this.vendor.storeName?.trim().length === 0){
                     this.errors.push("Store Name is a required field")
-                }else if (!/^[a-zA-Z 0-9']+$/.test(this.vendor.storeName)){
-                    this.errors.push("Store Name may only contain alpha numeric characters")
+                }else if (!/^[a-zA-Z 0-9'\-/]+$/.test(this.vendor.storeName)){
+                    this.errors.push("Store Name may only contain alpha numeric characters and -, /, '")
                 }
                 if (this.vendor.address?.trim().length === 0){
                     this.errors.push("Address is a required field")
@@ -201,7 +210,7 @@
                         }
                     }
                 }
-                if (!this.agreeToTerms && !this.vendor.id){
+                if (this.role != 'Admin' && !this.agreeToTerms && !this.vendor.id){
                     this.errors.push("You must agree to the terms of service")
                 }
                 return (this.errors.length === 0) 
