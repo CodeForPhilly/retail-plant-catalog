@@ -32,7 +32,7 @@ public class VendorRepository : Repository<Vendor>
         obj.CreatedAt = DateTime.UtcNow;
         if (obj.Id == null)
             obj.Id = Guid.NewGuid().ToString();
-        string point = $"POINT({obj.Lat}, {obj.Lng})";
+        string point = $"POINT({obj.Lng}, {obj.Lat})";
         var recordsAffected = conn.Execute("insert into vendor (Id, UserId, StoreName,  Lat, Lng, Geo,Approved, Address, AllNative, State, StoreUrl, PublicEmail, PublicPhone, PlantCount, CreatedAt, Notes)" +
             $" values (@Id, @UserId, @StoreName, @Lat, @Lng, {point}, @Approved,@Address,@AllNative, @State,@StoreUrl, @PublicEmail, @PublicPhone, @PlantCount, @CreatedAt, @Notes)", obj);
         ClearAndInsertUrls(obj.Id, obj.PlantListingUrls);
