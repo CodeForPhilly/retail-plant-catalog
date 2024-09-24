@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿ using Microsoft.AspNetCore.Authorization;
 using System.Data;
 using Microsoft.AspNetCore.Mvc;
 using Repositories;
@@ -195,10 +195,30 @@ public class VendorController : BaseController
         var vendor = vendorRepository.Get(id);
         if (vendor == null) return false;
         plantCrawler.Init();
-        await plantCrawler.Crawl(vendor);
+        plantCrawler.Crawl(vendor).Wait();
         var plants = plantRepository.FindByVendor(vendor.Id);
         vendor.PlantCount = plants.Count();
         vendorRepository.Update(vendor);
+        return true;
+    }
+
+    [HttpPost]
+    [ApiExplorerSettings(GroupName = "v2")]
+    
+    [Route("CrawlAll")]
+    public async Task<bool> CrawlAll()
+    {
+        plantCrawler.Init();
+        foreach (var vendor in vendorRepository.GetAll())
+        {
+            if (vendor?.Id == null || !vendor.Approved) continue;
+            var populatedVendor = vendorRepository.Get(vendor.Id); //must get the plantlistingUrls
+            if (!populatedVendor.PlantListingUrls.Any()) continue;
+            plantCrawler.Crawl(populatedVendor).Wait();
+            var plants = plantRepository.FindByVendor(vendor.Id);
+            populatedVendor.PlantCount = plants.Count();
+            vendorRepository.Update(populatedVendor);
+        }
         return true;
     }
 

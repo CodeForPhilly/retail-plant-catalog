@@ -120,6 +120,8 @@ public class VendorRepository : Repository<Vendor>
 
     public IEnumerable<Vendor> FindByState(string state)
     {
+        if (state == "ALL")
+            return conn.Query<Vendor>("select * from vendor v where Approved and not IsDeleted order by StoreName", new { state });
         return conn.Query<Vendor>("select * from vendor v where Approved and not IsDeleted and state = @state order by StoreName", new { state });
     }
 
