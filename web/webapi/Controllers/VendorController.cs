@@ -1,4 +1,4 @@
-﻿ using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using System.Data;
 using Microsoft.AspNetCore.Mvc;
 using Repositories;
@@ -17,15 +17,19 @@ namespace webapi.Controllers;
 public class VendorController : BaseController
 {
     private readonly VendorRepository vendorRepository;
+    private readonly VendorUrlRepository vendorUrlRepository;
     private readonly UserRepository userRepository;
     private readonly PlantRepository plantRepository;
     private readonly ZipRepository zipRepository;
+    private readonly VendorService vendorService;
     private readonly PlantCrawler plantCrawler;
     private readonly AmazonSimpleEmailServiceClient amazonSes;
     private readonly ILog logger;
 
     public VendorController(
         VendorRepository vendorRepository,
+        VendorUrlRepository vendorUrlRepository,
+        VendorService vendorService,
         UserRepository userRepository,
         PlantRepository plantRepository,
         ZipRepository zipRepository,
@@ -34,10 +38,12 @@ public class VendorController : BaseController
         ILog logger)
     {
         this.vendorRepository = vendorRepository;
+        this.vendorUrlRepository = vendorUrlRepository;
         this.userRepository = userRepository;
         this.plantRepository = plantRepository;
         this.zipRepository = zipRepository;
         this.plantCrawler = plantCrawler;
+        this.vendorService = vendorService;
         this.amazonSes = amazonSes;
         this.logger = logger;
     }
@@ -68,7 +74,7 @@ public class VendorController : BaseController
             user.RoleEnum = UserType.Vendor;
             userRepository.Update(user);
         }
-        vendorRepository.Insert(vendor);
+        vendorService.CreateAsync(vendor).Wait();
         return new GenericResponse { Success = true, Id = vendor.Id, RedirectUrl = User.IsInRole("Admin") ? "/#/vendors" : "/#/"};
     }
 
@@ -90,6 +96,7 @@ public class VendorController : BaseController
         existingVendor.Lat = vendor.Lat;
         existingVendor.Lng = vendor.Lng;
         vendorRepository.Update(existingVendor);
+        vendorService.SaveUrls(vendor.Id, vendor.PlantListingUris.Select(u => u.Uri).ToArray()).Wait();
         return new GenericResponse { Success = true, Message="Vendor update successful", RedirectUrl = User.IsInRole("Admin") ? "/#/vendors" : "/#/" };
     }
 
@@ -134,7 +141,7 @@ public class VendorController : BaseController
     [Route("Get")]
     public Vendor Get([FromQuery] string id)
     {
-        var vendor = vendorRepository.Get(id);
+        var vendor = vendorService.GetPopulatedVendor(id);
         return vendor;
     }
 
@@ -192,12 +199,21 @@ public class VendorController : BaseController
     [Route("Crawl")]
     public async Task<bool> Crawl([FromQuery] string id)
     {
-        var vendor = vendorRepository.Get(id);
+        var vendor = vendorService.GetPopulatedVendor(id);
         if (vendor == null) return false;
+        
+        // Count errors before crawling
+        if (vendor.PlantListingUris != null)
+        {
+            vendor.CrawlErrors = vendor.PlantListingUris.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok);
+            vendorRepository.Update(vendor);
+        }
+        
         plantCrawler.Init();
         plantCrawler.Crawl(vendor).Wait();
         var plants = plantRepository.FindByVendor(vendor.Id);
         vendor.PlantCount = plants.Count();
+        vendor.CrawlErrors = vendor.PlantListingUris?.Select(u => u.LastStatus != CrawlStatus.Ok)?.Count() ?? 0 ;
         vendorRepository.Update(vendor);
         return true;
     }
@@ -212,8 +228,16 @@ public class VendorController : BaseController
         foreach (var vendor in vendorRepository.GetAll())
         {
             if (vendor?.Id == null || !vendor.Approved) continue;
-            var populatedVendor = vendorRepository.Get(vendor.Id); //must get the plantlistingUrls
+            var populatedVendor = vendorService.GetPopulatedVendor(vendor.Id); //must get the plantlistingUrls
             if (!populatedVendor.PlantListingUrls.Any()) continue;
+            
+            // Count errors before crawling
+            if (populatedVendor.PlantListingUris != null)
+            {
+                populatedVendor.CrawlErrors = populatedVendor.PlantListingUris.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok);
+                vendorRepository.Update(populatedVendor);
+            }
+            
             plantCrawler.Crawl(populatedVendor).Wait();
             var plants = plantRepository.FindByVendor(vendor.Id);
             populatedVendor.PlantCount = plants.Count();

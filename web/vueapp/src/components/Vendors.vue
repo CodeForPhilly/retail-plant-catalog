@@ -81,7 +81,10 @@
                 </thead>
                 <tbody>
                     <tr v-for="vendor in post" :key="vendor.id">
-                        <td>{{ vendor.storeName }}</td>
+                        <td>
+                            {{ vendor.storeName }}
+                            <span v-if="vendor.crawlErrors > 0" class="error-badge">{{ vendor.crawlErrors }}</span>
+                        </td>
                         <td>{{ vendor.plantCount }}</td>
                         <td>{{ vendor.createdAt }}</td>
                         <td>{{ vendor.approved }}</td>
@@ -139,6 +142,20 @@
     }
     #controls select{
         float:right;
+    }
+    .error-badge {
+        display: inline-block;
+        background-color: #e53935;
+        color: white;
+        border-radius: 50%;
+        min-width: 20px;
+        height: 20px;
+        text-align: center;
+        font-size: 12px;
+        line-height: 20px;
+        margin-left: 8px;
+        font-weight: bold;
+        padding: 0 4px;
     }
     /* .content{
         clear:both;

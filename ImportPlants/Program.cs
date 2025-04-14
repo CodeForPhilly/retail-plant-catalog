@@ -22,7 +22,7 @@ await AssociatePlantsToVendors(vendorRepository, plantRepository);
 static void ParseNurseries(MySqlConnection conn)
 {
     var vendorRepository = new VendorRepository(conn);
-
+    var vendorUrlRepository = new VendorUrlRepository(conn);
     var json = File.ReadAllText("nurseries.json");
     json = json.Replace("Plant List  (Raw)", "PlantListRaw")
                .Replace("Plant List ", "PlantList");
@@ -48,8 +48,12 @@ static void ParseNurseries(MySqlConnection conn)
             Lng = nursery.Long
         };
 
-        vendor.PlantListingUrls = new List<string> { nursery.PlantList, nursery.PlantListRaw }.ToArray();
+        vendor.PlantListingUris = new List<VendorUrl> { new VendorUrl{ Id=Guid.NewGuid().ToString(), VendorId = vendor.Id, Uri= nursery.PlantList }, new VendorUrl { Id=Guid.NewGuid().ToString(), VendorId = vendor.Id, Uri = nursery.PlantListRaw } }.ToArray();
         vendorRepository.Insert(vendor);
+        foreach (var vendorUrl in vendor.PlantListingUris)
+        {
+            vendorUrlRepository.Insert(vendorUrl);
+        }
     }
 }
 static void ParsePlants(MySqlConnection conn)

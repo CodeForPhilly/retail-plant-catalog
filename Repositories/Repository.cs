@@ -27,15 +27,27 @@ public class Repository<T> : IRepository<T> where T : class
     {
         return conn.Get<T>(id);
     }
+    public virtual async Task<T> GetAsync(string id)
+    {
+        return await conn.GetAsync<T>(id);
+    }
 
     public IEnumerable<T> GetAll()
     {
         return conn.GetAll<T>();
     }
+    public async Task<IEnumerable<T>> GetAllAsync()
+    {
+        return await conn.GetAllAsync<T>();
+    }
 
     public virtual long Insert(T obj)
     {
             return conn.Insert<T>(obj);
+    }
+    public virtual async Task<long> InsertAsync(T obj)
+    {
+        return await conn.InsertAsync(obj);
     }
 
     public virtual long Insert(IEnumerable<T> list)
@@ -46,6 +58,10 @@ public class Repository<T> : IRepository<T> where T : class
     public virtual bool Update(T obj)
     {
         return conn.Update(obj);
+    }
+    public async virtual Task<bool> UpdateAsync(T obj)
+    {
+        return await conn.UpdateAsync(obj);
     }
 
     public virtual bool Update(IEnumerable<T> list)

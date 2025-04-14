@@ -1,33 +1,106 @@
 ﻿using System.Reflection.PortableExecutable;
 using SavvyCrawler;
+using Shared;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace CrawlerTests
 {
     public class CrawlerTests
 	{
-		
+        [Fact]
+        public async Task ShouldThrow301()
+        {
+            try
+            {
+                var counter = new TermCounter("Japonica", "Camellia Black Magic");
+                var crawler = new Crawler(counter);
+                var result = await crawler.Start("https://www.hannasgardenshop.com/dept/11/camellias", 1);
+
+            }catch(CrawlFailException ex)
+            {
+                Assert.Equal(CrawlStatus.Redirect, ex.CrawlStatus);
+                return;
+            }
+
+            Assert.Fail( "Should've thrown exception");
+        }
+       
+         [Fact]
+        public async Task ShouldThrow404()
+        {
+            try
+            {
+                var counter = new TermCounter("Japonica", "Camellia Black Magic");
+                var crawler = new Crawler(counter);
+                var result = await crawler.Start("https://hannasgardenshop.com/inventory/search?404=1&q=dept+1asfd+dfds", 1);
+
+            }
+            catch (CrawlFailException ex)
+            {
+                Assert.Equal(CrawlStatus.Missing, ex.CrawlStatus);
+                return;
+            }
+
+            Assert.Fail("Should've thrown exception");
+        }
+        [Fact]
+        public async Task ShouldThrowTimeout()
+        {
+            try
+            {
+                var counter = new TermCounter("Japonica", "Camellia Black Magic");
+                var crawler = new Crawler(counter);
+                var result = await crawler.Start("http://10.255.255.1/dept/11/camellias", 1);
+
+            }
+            catch (CrawlFailException ex)
+            {
+                Assert.Equal(CrawlStatus.Timeout, ex.CrawlStatus);
+                return;
+            }
+
+            Assert.Fail("Should've thrown exception");
+        }
+        [Fact]
+        public async Task ShouldThrowDnsError()
+        {
+            try
+            {
+                var counter = new TermCounter("Japonica", "Camellia Black Magic");
+                var crawler = new Crawler(counter);
+                var result = await crawler.Start("https://www.hannasssssgardenshop.com/dept/11/camellias", 1);
+
+            }
+            catch (CrawlFailException ex)
+            {
+                Assert.Equal(CrawlStatus.DnsFailure, ex.CrawlStatus);
+                return;
+            }
+
+            Assert.Fail("Should've thrown exception");
+        }
+
 		[Fact]
-        public async void ShouldCrawlSiteDirectLink()
+        public async Task ShouldCrawlSiteDirectLink()
         {
 			var counter = new TermCounter("Japonica", "Camellia Black Magic");
 
             var crawler = new Crawler(counter);
-			var result = await crawler.Start("https://www.hannasgardenshop.com/dept/11/camellias", 1);
+			var result = await crawler.Start("https://hannasgardenshop.com/dept/11/camellias", 1);
 			Assert.True(result["Camellia Black Magic"] > 0);
 		}
+        //Ignored because we need scripts for hungry plants
+        //[Fact]
+        //public async void ShouldEliminateScriptTags()
+        //{
+        //    var str = "<html><body><script>function alert('');\n{}</script></body></html>";
+        //    var counter = new TermCounter("Japonica", "Camellia Black Magic");
 
-        [Fact]
-        public async void ShouldEliminateScriptTags()
-        {
-            var str = "<html><body><script>function alert('');\n{}</script></body></html>";
-            var counter = new TermCounter("Japonica", "Camellia Black Magic");
-
-            var crawler = new Crawler(counter);
-            var result = crawler.StripScripts(str);
-            Assert.DoesNotContain("script", result);
-            Assert.Contains("body", result);
-        }
+        //    var crawler = new Crawler(counter);
+        //    var result = crawler.StripScripts(str);
+        //    Assert.DoesNotContain("script", result);
+        //    Assert.Contains("body", result);
+        //}
     }
 
 
@@ -93,17 +166,17 @@ namespace CrawlerTests
 			var result = await crawler.Start("https://docs.google.com/document/d/1oXvf0N4k9LXfqYG_s_e9306wCB95DAg740m7cX4Iqc8/edit", 1);
             Assert.Equal(1, result["Blazing Star"]);
         }
-        [Fact]
-        public async void CanCrawlWildRidge() //robots allowed
-        {
-            var counter = new TermCounter("Allium cernuum");
-            var crawler = new Crawler(counter);
-            var result = await crawler.Start("https://wildridgeplants.com/shop/", 1);
-            Assert.Equal(1, result["Allium cernuum"]);
-        }
+        //[Fact] //This site requires javascript eval
+        //public async Task CanCrawlWildRidge() //robots allowed
+        //{
+        //    var counter = new TermCounter("Allium cernuum");
+        //    var crawler = new Crawler(counter);
+        //    var result = await crawler.Start("https://wildridgeplants.com/shop/", 1);
+        //    Assert.Equal(1, result["Allium cernuum"]);
+        //}
 
         [Fact]
-        public async void CanParseGoodHostPlants() //robots allowed
+        public async Task CanParseGoodHostPlants() //robots allowed
         {
             var counter = new TermCounter("HEAM6");
             var crawler = new Crawler(counter);
@@ -112,7 +185,7 @@ namespace CrawlerTests
         }
 
         [Fact]
-        public async void CanFindSouthernCrabApple()
+        public async Task CanFindSouthernCrabApple()
         {
             var counter = new TermCounter("Southern Crabapple");
             var crawler = new Crawler(counter);
@@ -121,24 +194,24 @@ namespace CrawlerTests
         }
 
         [Fact]
-        public async void CanParseCalyx() //robots ALLOWED
+        public async Task CanParseCalyx() //robots ALLOWED
         {
             var counter = new TermCounter("Conoclinium coelestinum");
             var crawler = new Crawler(counter);
             var result = await crawler.Start("https://calyxnativenursery.com/plants/", 1);
             Assert.Equal(1, result["Conoclinium coelestinum"]);
         }
+        //[Fact] //pdf no longer there
+        //public async void CanParseNorthBrookNatives() //robots allowed
+        //{
+        //    var url = "https://static1.squarespace.com/static/602864f89f64ad59109853b1/t/622e2cec1eca2522201f54a7/1647193324231/TFF+2022+Natives+List.pdf";
+        //    var counter = new TermCounter("Aquilegia canadensis");
+        //    var crawler = new Crawler(counter);
+        //    var result = await crawler.Start(url, 1);
+        //    Assert.Equal(1, result["Aquilegia canadensis"]);
+        //}
         [Fact]
-        public async void CanParseNorthBrookNatives() //robots allowed
-        {
-            var url = "https://static1.squarespace.com/static/602864f89f64ad59109853b1/t/622e2cec1eca2522201f54a7/1647193324231/TFF+2022+Natives+List.pdf";
-            var counter = new TermCounter("Aquilegia canadensis");
-            var crawler = new Crawler(counter);
-            var result = await crawler.Start(url, 1);
-            Assert.Equal(1, result["Aquilegia canadensis"]);
-        }
-        [Fact]
-        public async void CanParseGrowWild() //Robots allowed
+        public async Task CanParseGrowWild() //Robots allowed
         {
             var url = "https://www.growildinc.com/plant-list/";
             var counter = new TermCounter("Acer leucoderme – Chalk Maple");
@@ -174,14 +247,14 @@ namespace CrawlerTests
   //      }
     
 		[Fact]
-		public async void CanParseXlsx()
+		public async Task CanParseXlsx()
 		{
 			var text = ExcelHelpers.GetText(GetStream("catalog.xlsx"));
             Assert.Contains("Hi Martin", text);
             Assert.Contains("Hi Susan", text);
         }
         [Fact]
-        public async void CanParseComplexXlsx()
+        public async Task CanParseComplexXlsx()
         {
             var text = ExcelHelpers.GetText(GetStream("catalog_complex.xlsx"));
             Assert.Contains("Monarda fistulosa", text);
@@ -190,7 +263,7 @@ namespace CrawlerTests
 
 
         [Fact]
-		public async void CanParseXlsxRemote()
+		public async Task CanParseXlsxRemote()
 		{
             var counter = new TermCounter("Monarda fistulosa", "Wild Bergamot");
             var crawler = new Crawler(counter);
@@ -199,7 +272,7 @@ namespace CrawlerTests
             Assert.Equal(1, result["Wild Bergamot"]);
         }
 		[Fact]
-		public async void CanParsePdfRemote()
+		public async Task CanParsePdfRemote()
 		{
             var counter = new TermCounter("Bald Cypress");
             var crawler = new Crawler(counter);

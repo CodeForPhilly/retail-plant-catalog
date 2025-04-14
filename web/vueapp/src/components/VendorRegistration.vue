@@ -29,10 +29,15 @@
                 cancel
                 </span>
             </div>
-           <div class="urls" v-for="(v,k) in vendor.plantListingUrls" v-bind:key="k">
-                {{ v }} <span class="material-symbols-outlined" @click="removeUrl(v)">
+           <div class="urls" v-for="(v,k) in vendor.plantListingUris" v-bind:key="k">
+                {{ v.uri }} <span class="material-symbols-outlined" @click="removeUrl(v)">
                                 disabled_by_default
-                                </span>
+                                </span> 
+                                <span v-if="v.lastStatus == 'None' || v.lastStatus == 'Ok'" class="success-tag" :title="prettyDate('Last successful crawl:', v.lastSucceeded)"><span class="material-symbols-outlined">check_circle</span> Success</span>
+                                <span v-else class="fail-tag" :title="prettyDate('Last failed crawl:', v.lastFailed) + '\n'+  prettyDate('Last successed crawl:', v.lastSucceeded)">
+                                    <span class="material-symbols-outlined">error</span> {{ v.lastStatus }}</span>
+                                   
+                               
             </div>
           
            <div class="error-box" v-if="errors.length">
@@ -134,6 +139,13 @@
             }
         },
         methods: {
+            prettyDate(prefix, date){
+                var d = new Date(date)
+                if (d.getFullYear() == 1){
+                    return prefix + " Never"
+                }
+                return prefix + " " + d.toLocaleDateString() + " " + d.toLocaleTimeString()
+            },
             async submit(){
                 var didValidate = await this.validate();
                 if (!didValidate) return;
@@ -196,11 +208,11 @@
                 }else if (!/^\(\d{3}\) \d{3}-\d{4}$/.test(this.vendor.publicPhone)){
                     this.errors.push("Public Phone must be a valid US number")
                 }
-                if (this.vendor.plantListingUrls == null || this.vendor.plantListingUrls.length === 0){
+                if (this.vendor.plantListingUris == null || this.vendor.plantListingUris.length === 0){
                     this.errors.push("There must be at least one Plant Listing URL.  Be sure to hit the add button")
                 }else{
                     console.log("listing urls breakpoint")
-                    for (var uri of this.vendor.plantListingUrls){
+                    for (var uri of this.vendor.plantListingUris){
                         console.log("Evaluating url: " + uri)
                         var result = await utils.getData("/vendor/IsAllowed?Url=" + encodeURIComponent(uri))
                         if (!result.success){
@@ -226,17 +238,17 @@
                 this.error = "Invalid url.  Please try again."
                 return;
                }
-               var dup = this.vendor.plantListingUrls.filter(u => u == this.plantListingUrl);
+               var dup = this.vendor.plantListingUris.filter(u => u.uri == this.plantListingUrl);
                if (dup.length > 0){
                 this.error = "Cannot enter a duplicate url."
                 return;
                }
-               this.vendor.plantListingUrls.push(this.plantListingUrl) 
+               this.vendor.plantListingUris.push({uri:this.plantListingUrl}) 
                this.plantListingUrl = "";
             },
             removeUrl(v){
                 if (confirm("Are you sure you want to remove this url? " + v)){
-                    this.vendor.plantListingUrls = this.vendor.plantListingUrls.filter(u => u != v)
+                    this.vendor.plantListingUris = this.vendor.plantListingUris.filter(u => u.uri != v.uri)
                 }
             }
         },
@@ -245,6 +257,13 @@
 <style scoped>
 input[type="checkbox"]{
     margin-left:20px;
+}
+.fail-tag{
+    color: red;
+
+}
+.success-tag{
+    color: green;
 }
 .form-holder{
     background: #EBECF0 0% 0% no-repeat padding-box;

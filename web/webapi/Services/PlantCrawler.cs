@@ -8,12 +8,16 @@ namespace webapi.Services
     public class PlantCrawler
     {
         private readonly PlantRepository plantRepository;
+        private readonly VendorService vendorService;
+        private readonly VendorUrlRepository vendorUrlRepository;
         private readonly Dictionary<string, string> plantLookup = new Dictionary<string, string>(); //term to plantId
         private string[] terms = new string[] { };
 
-        public PlantCrawler(PlantRepository plantRepository)
+        public PlantCrawler(PlantRepository plantRepository, VendorService vendorService, VendorUrlRepository vendorUrlRepository)
         {
             this.plantRepository = plantRepository;
+            this.vendorService = vendorService;
+            this.vendorUrlRepository = vendorUrlRepository;
         }
 
         public void Init()
@@ -34,20 +38,37 @@ namespace webapi.Services
             plantRepository.ClearAssociations(vendor.Id);
             var termCounter = new TermCounter(terms);
             var crawler = new Crawler(termCounter);
-            if (vendor.PlantListingUrls != null)
+            if (vendor.PlantListingUris != null)
             {
-                foreach (var uri in vendor.PlantListingUrls.Distinct())
+                foreach (var plu in vendor.PlantListingUris)
                 {
-                    await crawler.Start(uri, 1);
-                    var termsFound = termCounter.Terms.Where(t => t.Value > 0).Select(t => t.Key);
-                    foreach (var term in termsFound)
+                    try
                     {
-                        if (plantLookup.ContainsKey(term))
+                        await crawler.Start(plu.Uri, 1);
+                        var termsFound = termCounter.Terms.Where(t => t.Value > 0).Select(t => t.Key);
+                        foreach (var term in termsFound)
                         {
-                            var plantId = plantLookup[term];
-                            plantRepository.Associate(plantId, vendor.Id);
+                            if (plantLookup.ContainsKey(term))
+                            {
+                                var plantId = plantLookup[term];
+                                plantRepository.Associate(plantId, vendor.Id);
+                            }
                         }
+                        plu.LastSucceeded = DateTime.Now;
+                    }catch(CrawlFailException cfex)
+                    {
+                        plu.LastStatus = cfex.CrawlStatus;
+                        plu.LastFailed = DateTime.Now;
                     }
+                    try
+                    {
+                        await vendorUrlRepository.UpdateAsync(plu);
+                    }
+                    catch(Exception ex)
+                    {
+
+                    }
+                 
                 }
             }
         }

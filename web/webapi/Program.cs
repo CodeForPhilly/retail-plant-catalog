@@ -2,11 +2,13 @@ using System.Data;
 using System.Reflection;
 using Amazon;
 using Amazon.SimpleEmail;
+using Dapper;
 using FluentLogger;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.OpenApi.Models;
 using MySqlConnector;
 using Repositories;
+using Shared;
 using webapi.Services;
 
 
@@ -70,8 +72,11 @@ builder.Services.AddSingleton((container) =>
     logger.Info("Application Initialized: " + DateTime.Now.ToLongDateString());
     return logger;
 });
+
 builder.Services.AddTransient<UserRepository, UserRepository>();
 builder.Services.AddTransient<VendorRepository, VendorRepository>();
+builder.Services.AddTransient<VendorUrlRepository, VendorUrlRepository>();
+builder.Services.AddTransient<VendorService, VendorService>();
 builder.Services.AddTransient<InviteRepository, InviteRepository>();
 builder.Services.AddTransient<ZipRepository, ZipRepository>();
 builder.Services.AddTransient<PlantRepository, PlantRepository>();

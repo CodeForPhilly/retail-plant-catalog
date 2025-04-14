@@ -10,12 +10,6 @@ public class VendorRepository : Repository<Vendor>
     {
 
     }
-    public override Vendor Get(string id)
-    {
-        var vendor = base.Get(id);
-        vendor.PlantListingUrls = conn.Query<string>("select Uri from vendor_urls where VendorId = @vendorId", new { vendorId = vendor.Id }).ToArray();
-        return vendor;
-    }
     public IEnumerable<Vendor> Find(bool unapprovedOnly, bool showDeleted, string state, string sortBy, int skip, int take)
     {
         var deleteConstraint = showDeleted ? "1=1" : "IsDeleted = false";
@@ -35,15 +29,13 @@ public class VendorRepository : Repository<Vendor>
         string point = $"POINT({obj.Lng}, {obj.Lat})";
         var recordsAffected = conn.Execute("insert into vendor (Id, UserId, StoreName,  Lat, Lng, Geo,Approved, Address, AllNative, State, StoreUrl, PublicEmail, PublicPhone, PlantCount, CreatedAt, Notes)" +
             $" values (@Id, @UserId, @StoreName, @Lat, @Lng, {point}, @Approved,@Address,@AllNative, @State,@StoreUrl, @PublicEmail, @PublicPhone, @PlantCount, @CreatedAt, @Notes)", obj);
-        ClearAndInsertUrls(obj.Id, obj.PlantListingUrls);
         return recordsAffected;
     }
     public override bool Update(Vendor obj)
     {
-        ClearAndInsertUrls(obj.Id, obj.PlantListingUrls);
         string  point = $"POINT({obj.Lng}, {obj.Lat})";
 
-        conn.Execute($"update vendor set StoreName=@StoreName, Address=@Address, Lng=@Lng, Lat=@Lat, Geo={point}, StoreUrl=@StoreUrl, PublicEmail=@PublicEmail, PublicPhone=@PublicPhone, Approved=@Approved, PlantCount=@PlantCount, AllNative=@AllNative, Notes=@Notes where id = @Id", obj);
+        conn.Execute($"update vendor set StoreName=@StoreName, Address=@Address, Lng=@Lng, Lat=@Lat, Geo={point}, StoreUrl=@StoreUrl, PublicEmail=@PublicEmail, PublicPhone=@PublicPhone, Approved=@Approved, PlantCount=@PlantCount, AllNative=@AllNative, CrawlErrors=@CrawlErrors, Notes=@Notes where id = @Id", obj);
         return true;
     }
     
@@ -90,7 +82,6 @@ public class VendorRepository : Repository<Vendor>
     {
         var vendor = conn.QueryFirstOrDefault<Vendor>("select * from vendor where UserId = @userId and IsDeleted = false", new { userId });
         if (vendor == null) return null;
-        vendor.PlantListingUrls = conn.Query<string>("select Uri from vendor_urls where VendorId = @vendorId", new { vendorId = vendor.Id }).ToArray();
         return vendor;
     }
 

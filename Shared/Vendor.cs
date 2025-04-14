@@ -36,9 +36,16 @@ namespace Shared
         public int PlantCount { get; set; }
 
         public string Notes { get; set; } = "";
+        public int CrawlErrors { get;set; }
+
 
         [Computed]
-        public string[] PlantListingUrls { get; set; } = new string[] { };
+        public VendorUrl[]? PlantListingUris { get; set; }
+        /// <summary>
+        /// Used to submit urls from the UI
+        /// </summary>
+        [Computed]
+        public string[]? PlantListingUrls { get; set; } = new string[] { };
 
         public DateTime CreatedAt { get; set; }
 
@@ -50,4 +57,5 @@ namespace Shared
     {
         public decimal Distance { get; set; }
     }
+    
 }

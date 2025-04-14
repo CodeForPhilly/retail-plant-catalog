@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using RobotsParser;
+using Shared;
 
 namespace SavvyCrawler
 {
@@ -14,12 +15,14 @@ namespace SavvyCrawler
         private Robots? robots;
         private bool robotsLoaded = false;
         private readonly TermCounter counter;
-        private readonly WebClient client;
+        private HttpClient client;
 
         public Crawler(TermCounter counter) {
             this.counter = counter;
 #pragma warning disable SYSLIB0014 // Type or member is obsolete
-            client = new WebClient();
+            client = new HttpClient();
+            client.Timeout = TimeSpan.FromSeconds(5);
+            
               //
 #pragma warning restore SYSLIB0014 // Type or member is obsolete
          
@@ -28,14 +31,15 @@ namespace SavvyCrawler
         {
             if (legacyDevice)
             {
-                client.Headers.Set("User-Agent", "BlackBerry8100/4.2.0 Profile/MIDP-2.0 Configuration/CLDC-1.1 VendorID/155");
-             }
+                client = new HttpClient();
+                client.DefaultRequestHeaders.Add("User-Agent", "BlackBerry8100/4.2.0 Profile/MIDP-2.0 Configuration/CLDC-1.1 VendorID/155");
+            }
             else
             {
-                client.Headers.Set("User-Agent", "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)");
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)");
 
             }
-            client.Headers.Set("Accept-Encoding", "none");
+            client.DefaultRequestHeaders.Add("Accept-Encoding", "none");
         }
 
 
@@ -48,15 +52,14 @@ namespace SavvyCrawler
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Cannot parse: " + absolutePath);
-                return new Dictionary<string, int>();
+                throw new CrawlFailException(CrawlStatus.UrlParsingError);
             }
             var robotsUrl = $"http://{host}/robots.txt";
             robots = new Robots("PAC Agent");
         
             try
             {
-                string downloadString = client.DownloadString(robotsUrl);
+                string downloadString = await client.GetStringAsync(robotsUrl);
                 if (!string.IsNullOrEmpty(downloadString))
                 {
                     await robots.LoadRobotsContent(downloadString);
@@ -64,12 +67,40 @@ namespace SavvyCrawler
                 }
             }catch(Exception ex)
             {
-                //ignore
+                //ignore:  Can't parse robots, then no restrictions
             }
             SetDefaultHeaders();
-            await FetchUrl(absolutePath);
+            await FetchUrl(absolutePath).ContinueWith(t =>
+            {
+                if (t.Exception != null)
+                {
+                    var ex = (t.Exception as AggregateException).InnerException;
+                    if (ex is HttpRequestException)
+                    {
+                        var webex = ex as HttpRequestException;
+                        if (webex != null && webex.HttpRequestError == HttpRequestError.NameResolutionError)
+                            throw new CrawlFailException(CrawlStatus.DnsFailure);
+                        switch (webex.StatusCode)
+                        {
+                            case HttpStatusCode.TemporaryRedirect:
+                            case HttpStatusCode.Redirect:
+                            case HttpStatusCode.Moved:
+                                throw new CrawlFailException(CrawlStatus.Redirect);
+                            case HttpStatusCode.NotFound:
+                                throw new CrawlFailException(CrawlStatus.Missing);
+
+                        }
+                    }
+                    if (ex is TimeoutException)
+                    {
+                        throw new CrawlFailException(CrawlStatus.Timeout);
+                    }
+                    
+
+                }
+            });
             //get host and ignore non hosts
-         
+
             var unvisited = new List<string>();
             do {
                 unvisited = Links.Except(Visited).ToList();
@@ -85,13 +116,12 @@ namespace SavvyCrawler
 
         private async Task FetchUrl(string absolutePath)
         {
-            if (robotsLoaded)
-            {
-                var disallowByDefault = robots?.GetDisallowedPaths()?.Any(u => u == "/") ?? false;
-                if (disallowByDefault && !(robots?.IsPathAllowed(absolutePath) ?? true))  return;
-            }
-            try
-            {
+                if (robotsLoaded)
+                {
+                    var disallowByDefault = robots?.GetDisallowedPaths()?.Any(u => u == "/") ?? false;
+                    if (disallowByDefault && !(robots?.IsPathAllowed(absolutePath) ?? true)) return;
+                }
+
                 var uri = new Uri(absolutePath);
                 var parts = uri.PathAndQuery.Split('?');
                 string text = "";
@@ -100,13 +130,13 @@ namespace SavvyCrawler
                 if (parts[0].EndsWith(".pdf"))
                 {
                     //Get pdf into memory
-                   var data = client.DownloadData(absolutePath);
+                    var data = await client.GetByteArrayAsync(absolutePath);
                     using var ms = new MemoryStream(data);
                     text = PdfExtensions.GetText(ms);
-                }else if (parts[0].EndsWith(".xlsx"))
+                } else if (parts[0].EndsWith(".xlsx"))
                 {
                     // get xlsx into memory
-                    var data = client.DownloadData(absolutePath);
+                    var data = await client.GetByteArrayAsync(absolutePath);
                     using var ms = new MemoryStream(data);
                     text = ExcelHelpers.GetText(ms);
                 }
@@ -156,22 +186,13 @@ namespace SavvyCrawler
                     }
                 }
             }
-            catch (WebException ex)
-            {
-                //ignore
-                Console.WriteLine(ex.Message + " " + ex.Response?.ResponseUri);
-            }catch(Exception ex)
-            {
-                //ignore
-                Console.WriteLine(ex.Message);
-            }
-        }
+        
 
         public async Task<string> ParseHtml(string absolutePath)
         {
             if (absolutePath.Contains("google.com"))
                 SetDefaultHeaders(true);
-            var str =  await client.DownloadStringTaskAsync(new Uri(absolutePath));
+            var str =  await client.GetStringAsync(new Uri(absolutePath));
             return StripScripts(str);
         }
         public string StripScripts(string html)
