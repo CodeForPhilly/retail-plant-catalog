@@ -282,7 +282,6 @@
                       await utils.getData(`/vendor/get?id=${this.vendor.id}`)
                       .then(json => {
                         // Preserve the newly added URL while updating
-                        const existingUrls = this.vendor.plantListingUris || [];
                         this.vendor = json;
                         
                         // If the new URL is not in the refreshed data, add it back
@@ -294,7 +293,6 @@
                       await utils.getData("/vendor/current")
                       .then(json => {
                         // Preserve the newly added URL while updating
-                        const existingUrls = this.vendor.plantListingUris || [];
                         this.vendor = json;
                         
                         // If the new URL is not in the refreshed data, add it back
@@ -319,7 +317,7 @@
                this.plantListingUrl = "";
             },
             removeUrl(v){
-                if (confirm("Are you sure you want to remove this url? " + v)){
+                if (confirm("Are you sure you want to remove this url? " + v.uri)){
                     this.vendor.plantListingUris = this.vendor.plantListingUris.filter(u => u.uri != v.uri)
                 }
             },
