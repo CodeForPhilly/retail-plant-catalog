@@ -354,6 +354,97 @@ public class VendorController : BaseController
         return FindByRadius(zip.Lat, zip.Lng, radius);
     }
 
+    [HttpPost]
+    [ApiExplorerSettings(GroupName = "v2")]
+    [Authorize(Roles = "Admin,Vendor")]
+    [Route("TestUrl")]
+    public async Task<GenericResponse> TestUrl([FromBody] TestUrlRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(request.Url))
+                return new GenericResponse { Success = false, Message = "URL cannot be empty" };
 
+            var vendor = vendorService.GetPopulatedVendor(request.VendorId);
+            if (vendor == null) 
+                return new GenericResponse { Success = false, Message = "Vendor not found" };
 
+            // Initialize the plant crawler (needed for term lookup)
+            plantCrawler.Init();
+            
+            // Test the URL without doing the full crawl
+            var result = await plantCrawler.TestUrl(request.Url);
+            
+            // Create or update VendorUrl with test results
+            string urlId = request.UrlId ?? Guid.NewGuid().ToString();
+            
+            var vendorUrl = new VendorUrl
+            {
+                Id = urlId,
+                Uri = request.Url,
+                VendorId = vendor.Id,
+                LastStatus = result.Status
+            };
+            
+            if (result.Status == CrawlStatus.Ok)
+            {
+                vendorUrl.LastSucceeded = DateTime.UtcNow;
+            }
+            else
+            {
+                vendorUrl.LastFailed = DateTime.UtcNow;
+            }
+            
+            // Save the URL in the database by inserting or updating
+            var existingUrl = vendorUrlRepository.GetByUrlOrId(vendorUrl);
+            if (existingUrl != null)
+            {
+                vendorUrl.Id = existingUrl.Id;
+                await vendorUrlRepository.UpdateAsync(vendorUrl);
+            }
+            else
+            {
+                await vendorUrlRepository.InsertAsync(vendorUrl);
+            }
+            
+            // Update CrawlErrors count for the vendor
+            if (vendor.PlantListingUris != null)
+            {
+                // Add this URL to the list if it's new
+                var allUrls = vendor.PlantListingUris.ToList();
+                if (!allUrls.Any(u => u.Id == urlId))
+                {
+                    allUrls.Add(vendorUrl);
+                }
+                else
+                {
+                    // Update the status in the list
+                    var existingUrlInList = allUrls.First(u => u.Id == urlId);
+                    existingUrlInList.LastStatus = result.Status;
+                }
+                
+                vendor.CrawlErrors = allUrls.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok);
+                vendorRepository.Update(vendor);
+            }
+            
+            return new GenericResponse 
+            { 
+                Success = result.Status == CrawlStatus.Ok, 
+                Message = result.Status.ToString(),
+                Id = urlId
+            };
+        }
+        catch (Exception ex)
+        {
+            logger.Error("Error testing URL", ex);
+            return new GenericResponse { Success = false, Message = $"Error: {ex.Message}" };
+        }
+    }
+
+    public class TestUrlRequest
+    {
+        public string Url { get; set; }
+        public string VendorId { get; set; }
+        public string? UrlId { get; set; }
+    }
 }

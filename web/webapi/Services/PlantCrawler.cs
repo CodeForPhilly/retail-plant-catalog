@@ -32,6 +32,26 @@ namespace webapi.Services
             }
         }
 
+        public async Task<(CrawlStatus Status, Dictionary<string, int> Terms)> TestUrl(string url)
+        {
+            var termCounter = new TermCounter(terms);
+            var crawler = new Crawler(termCounter);
+            
+            try
+            {
+                await crawler.Start(url, 1, true);
+                return (CrawlStatus.Ok, termCounter.Terms);
+            }
+            catch (CrawlFailException cfex)
+            {
+                return (cfex.CrawlStatus, termCounter.Terms);
+            }
+            catch (Exception)
+            {
+                return (CrawlStatus.Missing, termCounter.Terms);
+            }
+        }
+
         public async Task Crawl(Vendor vendor)
         {
             if (vendor?.Id == null) return; //vendor must have an id to be associated

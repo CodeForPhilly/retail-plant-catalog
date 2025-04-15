@@ -33,6 +33,9 @@
                 {{ v.uri }} <span class="material-symbols-outlined" @click="removeUrl(v)">
                                 disabled_by_default
                                 </span> 
+                                <span class="material-symbols-outlined" @click="testExistingUrl(v)" title="Test URL">
+                                task_alt
+                                </span>
                                 <span v-if="v.lastStatus == 'None' || v.lastStatus == 'Ok'" class="success-tag" :title="prettyDate('Last successful crawl:', v.lastSucceeded)"><span class="material-symbols-outlined">check_circle</span> Success</span>
                                 <span v-else class="fail-tag" :title="prettyDate('Last failed crawl:', v.lastFailed) + '\n'+  prettyDate('Last successed crawl:', v.lastSucceeded)">
                                     <span class="material-symbols-outlined">error</span> {{ v.lastStatus }}</span>
@@ -227,7 +230,7 @@
                 }
                 return (this.errors.length === 0) 
             },
-            addUrl(){
+            async addUrl(){
                this.error = "";
                if (!this.plantListingUrl){
                 this.error = "Must enter url before adding!"
@@ -243,12 +246,119 @@
                 this.error = "Cannot enter a duplicate url."
                 return;
                }
-               this.vendor.plantListingUris.push({uri:this.plantListingUrl}) 
+               
+               // Test the URL before adding it
+               if (this.vendor.id) {
+                  try {
+                    this.error = "Testing URL...";
+                    const testResult = await utils.postData("/vendor/TestUrl", {
+                      url: this.plantListingUrl,
+                      vendorId: this.vendor.id
+                    });
+                    
+                    console.log("Test result:", testResult);
+                    
+                    // Add URL with test result status
+                    const newUrl = {
+                      id: testResult.id,
+                      uri: this.plantListingUrl,
+                      lastStatus: testResult.message
+                    };
+                    
+                    // Add the URL to the list regardless of success/failure
+                    if (!this.vendor.plantListingUris) {
+                      this.vendor.plantListingUris = [];
+                    }
+                    this.vendor.plantListingUris.push(newUrl);
+                    
+                    if (testResult.success) {
+                      this.error = "URL test successful! URL added.";
+                    } else {
+                      this.error = `URL test warning: ${testResult.message}. URL added but may have issues.`;
+                    }
+                    
+                    // Refresh the vendor data to get updated crawlErrors count
+                    if (this.role == 'Admin') {
+                      await utils.getData(`/vendor/get?id=${this.vendor.id}`)
+                      .then(json => {
+                        // Preserve the newly added URL while updating
+                        const existingUrls = this.vendor.plantListingUris || [];
+                        this.vendor = json;
+                        
+                        // If the new URL is not in the refreshed data, add it back
+                        if (this.vendor.plantListingUris && !this.vendor.plantListingUris.some(u => u.id === newUrl.id)) {
+                          this.vendor.plantListingUris.push(newUrl);
+                        }
+                      });
+                    } else {
+                      await utils.getData("/vendor/current")
+                      .then(json => {
+                        // Preserve the newly added URL while updating
+                        const existingUrls = this.vendor.plantListingUris || [];
+                        this.vendor = json;
+                        
+                        // If the new URL is not in the refreshed data, add it back
+                        if (this.vendor.plantListingUris && !this.vendor.plantListingUris.some(u => u.id === newUrl.id)) {
+                          this.vendor.plantListingUris.push(newUrl);
+                        }
+                      });
+                    }
+                  } catch (error) {
+                    console.error("URL test error:", error);
+                    this.error = "Error testing URL. Added URL but couldn't verify status.";
+                    this.vendor.plantListingUris.push({uri: this.plantListingUrl});
+                  }
+               } else {
+                 // If vendor doesn't have an ID yet (new vendor), just add the URL without testing
+                 if (!this.vendor.plantListingUris) {
+                   this.vendor.plantListingUris = [];
+                 }
+                 this.vendor.plantListingUris.push({uri: this.plantListingUrl});
+               }
+               
                this.plantListingUrl = "";
             },
             removeUrl(v){
                 if (confirm("Are you sure you want to remove this url? " + v)){
                     this.vendor.plantListingUris = this.vendor.plantListingUris.filter(u => u.uri != v.uri)
+                }
+            },
+            async testExistingUrl(v){
+                if (!this.vendor.id) {
+                    this.error = "Cannot test URL until vendor is saved.";
+                    return;
+                }
+                
+                try {
+                    this.error = "Testing URL...";
+                    const testResult = await utils.postData("/vendor/TestUrl", {
+                        url: v.uri,
+                        vendorId: this.vendor.id,
+                        urlId: v.id
+                    });
+                    
+                    // Update the URL status
+                    v.lastStatus = testResult.message;
+                    if (testResult.success) {
+                        this.error = "URL test successful!";
+                    } else {
+                        this.error = `URL test warning: ${testResult.message}`;
+                    }
+                    
+                    // Refresh the vendor data to get updated crawlErrors count
+                    if (this.role == 'Admin') {
+                        await utils.getData(`/vendor/get?id=${this.vendor.id}`)
+                        .then(json => {
+                            this.vendor = json;
+                        });
+                    } else {
+                        await utils.getData("/vendor/current")
+                        .then(json => {
+                            this.vendor = json;
+                        });
+                    }
+                } catch (error) {
+                    this.error = "Error testing URL: " + (error.message || "Unknown error");
                 }
             }
         },
@@ -260,10 +370,19 @@ input[type="checkbox"]{
 }
 .fail-tag{
     color: red;
-
+    margin-left: 10px;
 }
 .success-tag{
     color: green;
+    margin-left: 10px;
+}
+.error-holder{
+    margin: 10px;
+    padding: 8px;
+    background-color: #fff3cd;
+    border: 1px solid #ffeeba;
+    border-radius: 4px;
+    color: #856404;
 }
 .form-holder{
     background: #EBECF0 0% 0% no-repeat padding-box;
@@ -335,9 +454,6 @@ span.material-symbols-outlined {
 }
 #MazPhoneNumberInput input[type=text]{
     font-size:1.2em;
-}
-.error-holder{
-    margin:10px;
 }
 .urls{
     padding-left: 30px;

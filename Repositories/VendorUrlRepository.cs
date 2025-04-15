@@ -11,6 +11,11 @@ public class VendorUrlRepository : Repository<VendorUrl>
 
     }
 
+    public VendorUrl GetByUrlOrId(VendorUrl url)
+    {
+        return conn.QueryFirstOrDefault<VendorUrl>("select * from vendor_urls where Id = @id or (Uri = @Uri && VendorId = @VendorId)", url);
+    }
+
     public IEnumerable<VendorUrl> FindForVendor(string vendorId)
     {
         return conn.Query<VendorUrl>("select * from vendor_urls where VendorId = @vendorId", new { vendorId });

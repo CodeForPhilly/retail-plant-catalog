@@ -22,7 +22,7 @@ public class Repository<T> : IRepository<T> where T : class
     {
         return conn.Delete(list);
     }
-
+    
     public virtual T Get(string id)
     {
         return conn.Get<T>(id);

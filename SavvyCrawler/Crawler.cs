@@ -43,7 +43,7 @@ namespace SavvyCrawler
         }
 
 
-        public async Task<Dictionary<string, int>> Start(string absolutePath, int maxPages)
+        public async Task<Dictionary<string, int>> Start(string absolutePath, int maxPages, bool testOnly = false)
         {
             try
             {
@@ -70,7 +70,7 @@ namespace SavvyCrawler
                 //ignore:  Can't parse robots, then no restrictions
             }
             SetDefaultHeaders();
-            await FetchUrl(absolutePath).ContinueWith(t =>
+            await FetchUrl(absolutePath, testOnly).ContinueWith(t =>
             {
                 if (t.Exception != null)
                 {
@@ -100,6 +100,7 @@ namespace SavvyCrawler
                 }
             });
             //get host and ignore non hosts
+            if (testOnly) return new Dictionary<string, int> { };
 
             var unvisited = new List<string>();
             do {
@@ -108,13 +109,13 @@ namespace SavvyCrawler
                 {
                     maxPages--;
                     if (maxPages < 0) return counter.Terms;
-                    await FetchUrl(unvisitedLink);
+                    await FetchUrl(unvisitedLink, false);
                 }
             } while (unvisited.Count > 0);
             return counter.Terms;
         }
 
-        private async Task FetchUrl(string absolutePath)
+        private async Task FetchUrl(string absolutePath, bool testOnly)
         {
                 if (robotsLoaded)
                 {
@@ -146,8 +147,9 @@ namespace SavvyCrawler
                     isHtml = true;
                 }
                 Visited.Add(absolutePath);
-                counter.Examine(text);
-                if (!isHtml) return;
+                if (!testOnly)
+                    counter.Examine(text);
+                if (!isHtml || testOnly) return;
                 var doc = new HtmlDocument();
                 doc.LoadHtml(text);
                 var nodes = doc.DocumentNode.SelectNodes("//a[@href]");
