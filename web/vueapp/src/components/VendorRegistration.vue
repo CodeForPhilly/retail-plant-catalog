@@ -143,11 +143,14 @@
         },
         methods: {
             prettyDate(prefix, date){
-                var d = new Date(date)
-                if (d.getFullYear() == 1){
-                    return prefix + " Never"
+                if (!date) {
+                    return prefix + " Never";
                 }
-                return prefix + " " + d.toLocaleDateString() + " " + d.toLocaleTimeString()
+                var d = new Date(date);
+                if (d.getFullYear() == 1){
+                    return prefix + " Never";
+                }
+                return prefix + " " + d.toLocaleDateString() + " " + d.toLocaleTimeString();
             },
             async submit(){
                 var didValidate = await this.validate();

@@ -81,11 +81,13 @@ public class VendorController : BaseController
     [ApiExplorerSettings(GroupName = "v2")]
     [Authorize(Roles = "Admin,Vendor")]
     [Route("Update")]
-    public GenericResponse Update([FromBody] Vendor vendor)
+    public async Task<GenericResponse> Update([FromBody] Vendor vendor)
     {
         logger.Info("Updating vendor", vendor);
         var existingVendor = vendorRepository.Get(vendor.Id);
         if (existingVendor == null) return null;
+        
+        // Update basic vendor information
         existingVendor.PublicEmail = vendor.PublicEmail;
         existingVendor.PublicPhone = vendor.PublicPhone;
         existingVendor.StoreName = vendor.StoreName;
@@ -96,7 +98,25 @@ public class VendorController : BaseController
         existingVendor.Lat = vendor.Lat;
         existingVendor.Lng = vendor.Lng;
         vendorRepository.Update(existingVendor);
-        vendorService.SaveUrls(vendor.Id, vendor.PlantListingUris.Select(u => u.Uri).ToArray()).Wait();
+
+        // Get existing URLs for this vendor
+        var existingUrls = vendorUrlRepository.FindForVendor(vendor.Id).ToList();
+        
+        // Get the list of URLs being submitted
+        var submittedUrls = vendor.PlantListingUris?.Select(u => u.Uri).ToList() ?? new List<string>();
+        
+        // Find URLs that need to be removed (exist in DB but not in submission)
+        var urlsToRemove = existingUrls.Where(u => !submittedUrls.Contains(u.Uri));
+        
+        // Remove the URLs that are no longer present
+        foreach (var url in urlsToRemove)
+        {
+            vendorUrlRepository.Delete(url);
+        }
+
+        // Save the submitted URLs
+        await vendorService.SaveUrls(vendor.Id, submittedUrls.ToArray());
+        
         return new GenericResponse { Success = true, Message="Vendor update successful", RedirectUrl = User.IsInRole("Admin") ? "/#/vendors" : "/#/" };
     }
 
@@ -383,7 +403,9 @@ public class VendorController : BaseController
                 Id = urlId,
                 Uri = request.Url,
                 VendorId = vendor.Id,
-                LastStatus = result.Status
+                LastStatus = result.Status,
+                LastFailed = result.Status != CrawlStatus.Ok ? DateTime.Now : null,
+                LastSucceeded = null
             };
             
             if (result.Status == CrawlStatus.Ok)
