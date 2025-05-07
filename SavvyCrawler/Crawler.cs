@@ -72,6 +72,7 @@ namespace SavvyCrawler
             SetDefaultHeaders();
             await FetchUrl(absolutePath, testOnly).ContinueWith(t =>
             {
+                if (t.Status == TaskStatus.Canceled) throw new CrawlFailException(CrawlStatus.Timeout);
                 if (t.Exception != null)
                 {
                     var ex = (t.Exception as AggregateException).InnerException;
