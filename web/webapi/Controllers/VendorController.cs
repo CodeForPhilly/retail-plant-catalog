@@ -61,8 +61,11 @@ public class VendorController : BaseController
     [ApiExplorerSettings(GroupName = "v2")]
     [Authorize(Roles = "User,Vendor,Admin")]
     [Route("Create")]
-    public GenericResponse Create([FromBody] Vendor vendor)
+    public async Task<GenericResponse> Create([FromBody] Vendor vendor)
     {
+        try
+        {
+
         logger.Info("Vendor creating", vendor);
         if (vendor.Id == null || vendor.Id == Guid.Empty.ToString())
             vendor.Id = Guid.NewGuid().ToString();
@@ -74,8 +77,69 @@ public class VendorController : BaseController
             user.RoleEnum = UserType.Vendor;
             userRepository.Update(user);
         }
-        vendorService.CreateAsync(vendor).Wait();
+        
+        // Capture URLs before creating the vendor
+        var submittedUrls = vendor.PlantListingUris?.Select(u => u.Uri).ToList() ?? new List<string>();
+        
+        // Create the vendor first
+        await vendorService.CreateAsync(vendor);
+        
+        // Now that we have a vendor ID, properly test and add URLs with validation status
+        if (submittedUrls.Any())
+        {
+            plantCrawler.Init();
+            foreach (var url in submittedUrls)
+            {
+                try
+                {
+                    // Test each URL
+                    var result = await plantCrawler.TestUrl(url);
+                    
+                    // Create VendorUrl with test results
+                    string urlId = Guid.NewGuid().ToString();
+                    
+                    var vendorUrl = new VendorUrl
+                    {
+                        Id = urlId,
+                        Uri = url,
+                        VendorId = vendor.Id,
+                        LastStatus = result.Status,
+                        LastFailed = result.Status != CrawlStatus.Ok ? DateTime.Now : null,
+                        LastSucceeded = result.Status == CrawlStatus.Ok ? DateTime.UtcNow : null
+                    };
+                    
+                    // Save to database
+                    await vendorUrlRepository.InsertAsync(vendorUrl);
+                }
+                catch (Exception ex)
+                {
+                    logger.Error($"Error testing URL during vendor creation: {url}", ex);
+                    // Still create the URL entry but mark it with an error status
+                    await vendorUrlRepository.InsertAsync(new VendorUrl { 
+                        Id = Guid.NewGuid().ToString(), 
+                        Uri = url, 
+                        VendorId = vendor.Id, 
+                        LastStatus = CrawlStatus.UrlParsingError,
+                        LastFailed = DateTime.UtcNow
+                    });
+                }
+            }
+            
+            // Update the vendor with the proper crawl error count
+            var updatedVendor = vendorService.GetPopulatedVendor(vendor.Id);
+            if (updatedVendor.PlantListingUris != null)
+            {
+                updatedVendor.CrawlErrors = updatedVendor.PlantListingUris.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok);
+                vendorRepository.Update(updatedVendor);
+            }
+        }
+        
         return new GenericResponse { Success = true, Id = vendor.Id, RedirectUrl = User.IsInRole("Admin") ? "/#/vendors" : "/#/"};
+
+        }catch (Exception glex)
+        {
+            return new GenericResponse { Message = glex.Message + " " + glex.StackTrace };
+        }
     }
 
     [ApiExplorerSettings(GroupName = "v2")]
@@ -463,10 +527,53 @@ public class VendorController : BaseController
         }
     }
 
+    [HttpPost]
+    [ApiExplorerSettings(GroupName = "v2")]
+    [Authorize(Roles = "Admin,User,Vendor")]
+    [Route("ValidateUrl")]
+    public async Task<GenericResponse> ValidateUrl([FromBody] ValidateUrlRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(request.Url))
+                return new GenericResponse { Success = false, Message = "URL cannot be empty" };
+
+            // Check if URL is valid format
+            if (!Uri.TryCreate(request.Url, UriKind.Absolute, out _))
+                return new GenericResponse { Success = false, Message = "Invalid URL format" };
+
+            // Initialize the plant crawler (needed for term lookup)
+            plantCrawler.Init();
+            
+            // Test the URL without doing the full crawl
+            var result = await plantCrawler.TestUrl(request.Url);
+            
+            // Generate a temporary ID for the URL to be referenced in the UI
+            string tempUrlId = Guid.NewGuid().ToString();
+            
+            return new GenericResponse 
+            { 
+                Success = result.Status == CrawlStatus.Ok, 
+                Message = result.Status.ToString(),
+                Id = tempUrlId
+            };
+        }
+        catch (Exception ex)
+        {
+            logger.Error("Error validating URL", ex);
+            return new GenericResponse { Success = false, Message = $"Error: {ex.Message}" };
+        }
+    }
+
     public class TestUrlRequest
     {
         public string Url { get; set; }
         public string VendorId { get; set; }
         public string? UrlId { get; set; }
+    }
+
+    public class ValidateUrlRequest
+    {
+        public string Url { get; set; }
     }
 }

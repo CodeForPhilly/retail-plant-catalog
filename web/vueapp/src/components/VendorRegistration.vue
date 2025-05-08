@@ -244,14 +244,21 @@
                 this.error = "Invalid url.  Please try again."
                 return;
                }
+                // Ensure plantListingUris is initialized
+                if (!this.vendor.plantListingUris) {
+                 this.vendor.plantListingUris = [];
+               }
                var dup = this.vendor.plantListingUris.filter(u => u.uri == this.plantListingUrl);
                if (dup.length > 0){
                 this.error = "Cannot enter a duplicate url."
                 return;
                }
                
+              
+               
                // Test the URL before adding it
                if (this.vendor.id) {
+                  // If vendor already exists, use the TestUrl endpoint
                   try {
                     this.error = "Testing URL...";
                     const testResult = await utils.postData("/vendor/TestUrl", {
@@ -268,10 +275,7 @@
                       lastStatus: testResult.message
                     };
                     
-                    // Add the URL to the list regardless of success/failure
-                    if (!this.vendor.plantListingUris) {
-                      this.vendor.plantListingUris = [];
-                    }
+                    // Add the URL to the list
                     this.vendor.plantListingUris.push(newUrl);
                     
                     if (testResult.success) {
@@ -310,11 +314,35 @@
                     this.vendor.plantListingUris.push({uri: this.plantListingUrl});
                   }
                } else {
-                 // If vendor doesn't have an ID yet (new vendor), just add the URL without testing
-                 if (!this.vendor.plantListingUris) {
-                   this.vendor.plantListingUris = [];
+                 // If vendor doesn't have an ID yet (new vendor), use the ValidateUrl endpoint
+                 try {
+                   this.error = "Validating URL...";
+                   const validateResult = await utils.postData("/vendor/ValidateUrl", {
+                     url: this.plantListingUrl
+                   });
+                   
+                   console.log("Validation result:", validateResult);
+                   
+                   // Add URL with validation result status
+                   const newUrl = {
+                     id: validateResult.id, // This is a temporary ID until vendor is created
+                     uri: this.plantListingUrl,
+                     lastStatus: validateResult.message
+                   };
+                   
+                   // Add the URL to the list
+                   this.vendor.plantListingUris.push(newUrl);
+                   
+                   if (validateResult.success) {
+                     this.error = "URL validation successful! URL added.";
+                   } else {
+                     this.error = `URL validation warning: ${validateResult.message}. URL added but may have issues.`;
+                   }
+                 } catch (error) {
+                   console.error("URL validation error:", error);
+                   this.error = "Error validating URL. Added URL but couldn't verify status.";
+                   this.vendor.plantListingUris.push({uri: this.plantListingUrl});
                  }
-                 this.vendor.plantListingUris.push({uri: this.plantListingUrl});
                }
                
                this.plantListingUrl = "";

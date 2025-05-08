@@ -3,6 +3,7 @@
 using Dapper;
 using Shared;
 using System.Data;
+using System.Threading.Tasks;
 
 public class VendorRepository : Repository<Vendor>
 {
@@ -20,7 +21,16 @@ public class VendorRepository : Repository<Vendor>
             return conn.Query<Vendor>($"select * from vendor where Approved = false and {deleteConstraint} and {stateConstraint} order by {sortBy} limit @skip, @take", new { skip, take, state });
         return conn.Query<Vendor>($"select * from vendor where {stateConstraint} and {deleteConstraint} order by {sortBy} limit @skip, @take", new { skip, take, state });
     }
-
+    public override async Task<long> InsertAsync(Vendor obj)
+    {
+        obj.CreatedAt = DateTime.UtcNow;
+        if (obj.Id == null)
+            obj.Id = Guid.NewGuid().ToString();
+        string point = $"POINT({obj.Lng}, {obj.Lat})";
+        int recordsAffected =  await conn.ExecuteAsync("insert into vendor (Id, UserId, StoreName,  Lat, Lng, Geo,Approved, Address, AllNative, State, StoreUrl, PublicEmail, PublicPhone, PlantCount, CreatedAt, Notes)" +
+            $" values (@Id, @UserId, @StoreName, @Lat, @Lng, {point}, @Approved,@Address,@AllNative, @State,@StoreUrl, @PublicEmail, @PublicPhone, @PlantCount, @CreatedAt, @Notes)", obj);
+        return recordsAffected;
+    }
     public override long Insert(Vendor obj)
     {
         obj.CreatedAt = DateTime.UtcNow;

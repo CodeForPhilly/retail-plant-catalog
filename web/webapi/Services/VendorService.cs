@@ -40,11 +40,6 @@ namespace webapi.Services
         public async Task<Vendor> CreateAsync(Vendor vendor)
         {
             await vendorRepository.InsertAsync(vendor);
-            foreach (var vendorUrl in vendor.PlantListingUrls)
-            {
-                var vu = new VendorUrl { Id = Guid.NewGuid().ToString(), Uri = vendorUrl, VendorId = vendor.Id };
-                urlRepository.Insert(vu);
-            }
             return vendor;
         }
 
