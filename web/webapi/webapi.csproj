@@ -13,9 +13,9 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.8" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.8.0" />
-    <PackageReference Include="MySqlConnector" Version="2.3.7" />
+    <PackageReference Include="MySqlConnector" Version="2.4.0" />
     <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0" />
-    <PackageReference Include="AWSSDK.SimpleEmail" Version="3.7.401.12" />
+    <PackageReference Include="AWSSDK.SimpleEmail" Version="4.0.0.4" />
     <PackageReference Include="Nick.RobotsParser" Version="2.0.6" />
   </ItemGroup>
 
