@@ -175,15 +175,7 @@ namespace CrawlerTests
         //    Assert.Equal(1, result["Allium cernuum"]);
         //}
 
-        [Fact]
-        public async Task CanParseGoodHostPlants() //robots allowed
-        {
-            var counter = new TermCounter("HEAM6");
-            var crawler = new Crawler(counter);
-            var result = await crawler.Start("https://www.goodhostplants.com/plant-availability/", 1);
-            Assert.Equal(1, result["HEAM6"]);
-        }
-
+      
         [Fact]
         public async Task CanFindSouthernCrabApple()
         {

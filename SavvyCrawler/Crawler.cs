@@ -87,7 +87,8 @@ namespace SavvyCrawler
                                 throw new CrawlFailException(CrawlStatus.Redirect);
                             case HttpStatusCode.NotFound:
                                 throw new CrawlFailException(CrawlStatus.Missing);
-
+                            default:
+                                throw new CrawlFailException(CrawlStatus.Missing);
                         }
                     }
                     if (ex is TimeoutException)
