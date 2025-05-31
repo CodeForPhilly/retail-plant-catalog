@@ -1,7 +1,5 @@
 ﻿using System.Net;
-using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
-using HtmlAgilityPack;
 using RobotsParser;
 using Shared;
 
@@ -89,7 +87,8 @@ namespace SavvyCrawler
                                 throw new CrawlFailException(CrawlStatus.Redirect);
                             case HttpStatusCode.NotFound:
                                 throw new CrawlFailException(CrawlStatus.Missing);
-
+                            default:
+                                throw new CrawlFailException(CrawlStatus.Missing);
                         }
                     }
                     if (ex is TimeoutException)
@@ -150,45 +149,7 @@ namespace SavvyCrawler
                 Visited.Add(absolutePath);
                 if (!testOnly)
                     counter.Examine(text);
-                if (!isHtml || testOnly) return;
-                var doc = new HtmlDocument();
-                doc.LoadHtml(text);
-                var nodes = doc.DocumentNode.SelectNodes("//a[@href]");
-                if (nodes != null)
-                {
-                    foreach (HtmlNode link in nodes)
-                    {
-                        // Get the value of the HREF attribute
-                        string hrefValue = link.GetAttributeValue("href", string.Empty);
-                        try
-                        {
-                            if (string.IsNullOrEmpty(hrefValue)) continue;
-                            if (!hrefValue.StartsWith("http") && !hrefValue.StartsWith("tel:") && !hrefValue.StartsWith("mobile:"))
-                            {
-                                var hyper = new Uri(absolutePath);
-
-                                var hrefHost = hyper.Host;
-                                if (!hrefValue.StartsWith('/'))
-                                    hrefValue = "/" + hrefValue;
-                                hrefValue = $"{uri.Scheme}://{hrefHost}{hrefValue}";
-                                Links.Add(hrefValue);
-                            }
-                            else
-                            {
-                                var hrefHost = new Uri(hrefValue).Host;
-                                if (!string.IsNullOrEmpty(hrefValue) && hrefHost.Contains(host) && !Links.Contains(hrefValue))
-                                    Links.Add(hrefValue);
-                            }
-
-
-                        }
-                        catch (Exception ex)
-                        {
-                            return;
-                        }
-                    }
-                }
-            }
+        }
         
 
         public async Task<string> ParseHtml(string absolutePath)

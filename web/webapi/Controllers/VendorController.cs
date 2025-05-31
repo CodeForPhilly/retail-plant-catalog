@@ -127,6 +127,7 @@ public class VendorController : BaseController
             
             // Update the vendor with the proper crawl error count
             var updatedVendor = vendorService.GetPopulatedVendor(vendor.Id);
+           
             if (updatedVendor.PlantListingUris != null)
             {
                 updatedVendor.CrawlErrors = updatedVendor.PlantListingUris.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok);
@@ -161,8 +162,8 @@ public class VendorController : BaseController
         existingVendor.AllNative = vendor.AllNative;
         existingVendor.Lat = vendor.Lat;
         existingVendor.Lng = vendor.Lng;
-        vendorRepository.Update(existingVendor);
-
+        existingVendor.Notes = vendor.Notes;
+       
         // Get existing URLs for this vendor
         var existingUrls = vendorUrlRepository.FindForVendor(vendor.Id).ToList();
         
@@ -179,8 +180,11 @@ public class VendorController : BaseController
         }
 
         // Save the submitted URLs
-        await vendorService.SaveUrls(vendor.Id, submittedUrls.ToArray());
-        
+        var uri =  await vendorService.TestAndSaveUrls(vendor.Id, submittedUrls.ToArray(), plantCrawler);
+        existingVendor.PlantListingUris = uri.ToArray();
+        existingVendor.CrawlErrors = existingVendor.PlantListingUris?.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok) ?? 0;
+        vendorRepository.Update(existingVendor);
+
         return new GenericResponse { Success = true, Message="Vendor update successful", RedirectUrl = User.IsInRole("Admin") ? "/#/vendors" : "/#/" };
     }
 
@@ -286,18 +290,13 @@ public class VendorController : BaseController
         var vendor = vendorService.GetPopulatedVendor(id);
         if (vendor == null) return false;
         
-        // Count errors before crawling
-        if (vendor.PlantListingUris != null)
-        {
-            vendor.CrawlErrors = vendor.PlantListingUris.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok);
-            vendorRepository.Update(vendor);
-        }
+        
         
         plantCrawler.Init();
         plantCrawler.Crawl(vendor).Wait();
         var plants = plantRepository.FindByVendor(vendor.Id);
         vendor.PlantCount = plants.Count();
-        vendor.CrawlErrors = vendor.PlantListingUris?.Select(u => u.LastStatus != CrawlStatus.Ok)?.Count() ?? 0 ;
+        vendor.CrawlErrors = vendor.PlantListingUris?.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok) ?? 0;
         vendorRepository.Update(vendor);
         return true;
     }
@@ -318,7 +317,7 @@ public class VendorController : BaseController
             // Count errors before crawling
             if (populatedVendor.PlantListingUris != null)
             {
-                populatedVendor.CrawlErrors = populatedVendor.PlantListingUris.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok);
+                populatedVendor.CrawlErrors = populatedVendor.PlantListingUris?.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok) ?? 0;
                 vendorRepository.Update(populatedVendor);
             }
             
@@ -509,7 +508,7 @@ public class VendorController : BaseController
                     existingUrlInList.LastStatus = result.Status;
                 }
                 
-                vendor.CrawlErrors = allUrls.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok);
+                vendor.CrawlErrors = allUrls?.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok) ?? 0;
                 vendorRepository.Update(vendor);
             }
             
