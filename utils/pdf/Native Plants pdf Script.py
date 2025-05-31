@@ -48,7 +48,7 @@ unique_scientific_names[:100]
 
 
 # API Query Functions
-API_KEY = "6cfe39e1-72bd-44d9-abef-393e6f75f32c"
+API_KEY = "" #add API Key
 BASE_URL = "http://app.plantagents.org"
 
 
