@@ -409,3 +409,4 @@ web/.eslintrc.js
 web/.gitattributes
 web/.gitignore
 web/vueapp/node_modules
+/.vscode

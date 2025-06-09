@@ -1,17 +1,98 @@
+<!-- Google Places API (new) -->
 <template>
+  <div class="autocomplete-wrapper">
+    <div ref="autocompleteContainer"></div>
+  </div>
+</template>
+
+<script>
+import Vue from "vue";
+
+export default Vue.extend({
+  props: ["address"],
+  mounted() {
+    if (
+      !window.google ||
+      !window.google.maps ||
+      !window.google.maps.places ||
+      !window.google.maps.places.PlaceAutocompleteElement
+    ) {
+      console.warn("Google Places API did not load correctly");
+      return;
+    }
+    console.log("Google Places input has mounted successfully");
+    const placeAutocomplete =
+      new window.google.maps.places.PlaceAutocompleteElement();
+    placeAutocomplete.types = ["geocode"];
+    placeAutocomplete.componentRestrictions = { country: ["us"] };
+
+    this.$refs.autocompleteContainer.appendChild(placeAutocomplete);
+
+    placeAutocomplete.addEventListener(
+      "gmp-select",
+      async ({ placePrediction }) => {
+        const place = placePrediction.toPlace();
+        console.log("User selected " + place.location.l);
+        await place.fetchFields({
+          fields: ["formattedAddress", "location", "addressComponents"],
+        });
+
+        const lat = place.location.lat();
+        const lng = place.location.lng();
+
+        const components = place.addressComponents;
+
+        const state =
+          components.find((c) =>
+            c.types.includes("administrative_area_level_1")
+          )?.shortText || "";
+
+        const address = `${components[0]?.shortText || ""} ${
+          components[1]?.shortText || ""
+        }, ${components[2]?.shortText || ""}, ${state}`;
+
+        this.$emit("placeChange", {
+          lat,
+          lng,
+          address,
+          state,
+          place,
+        });
+      }
+    );
+  },
+});
+</script>
+
+<style scoped>
+/* Note: The PlaceAutocompleteElement uses shadow DOM, which limits styling flexibility.
+Only outer wrapper styles (e.g., size, margin) can be applied reliably. */
+.autocomplete-wrapper {
+  width: 100%;
+  max-width: 455.27px;
+  margin-left: 12px;
+  margin-bottom: 5px;
+  padding: 0;
+  border-radius: 6px;
+  background: white;
+  box-sizing: border-box;
+}
+</style>
+
+<!-- Google Places API (Legacy) -->
+<!-- <template>
     <div class="post">
-         <input v-model="address" placeholder="Address"  ref="autocomplete" 
+         <input v-model="address" placeholder="Address"  ref="autocomplete"
           required
           autocomplete="off"
           type="text"
-          
-        />
+          />
     </div>
 </template>
 
 <script lang="js">
     import Vue from 'vue';
-    
+
     export default Vue.extend({
         props:["address"],
         data() {
@@ -32,7 +113,7 @@
                 let ac = place.address_components;
                 this.lat = place.geometry.location.lat();
                 this.lng = place.geometry.location.lng();
-               
+
                 console.log(`The user picked`, place);
                 var state = ac.filter(a => a.types.indexOf("administrative_area_level_1") > -1)[0].short_name
                 const addy = `${ac[0].short_name} ${ac[1].short_name}, ${ac[2].short_name}, ${state} `
@@ -41,18 +122,11 @@
             });
         },
         methods:{
-           
+
         }
 
-    });
-</script>
-<style scoped>
-*, *::after, *::before {
-  margin: 0;
-  padding: 0;
-  box-sizing: inherit;
-}
-
+    }); -->
+<!-- <style scoped>
 body {
   background-color: #dcdde1;
   color: #2f3640;
@@ -72,4 +146,4 @@ body {
   text-align: center;
   border-radius: 10px;
 }
-</style>
+</style> -->

@@ -22,6 +22,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
+
     c.SwaggerDoc("v2", new OpenApiInfo { Title = "My API - V2", Version = "v2" });
     c.SwaggerDoc("v1", new OpenApiInfo
     {
