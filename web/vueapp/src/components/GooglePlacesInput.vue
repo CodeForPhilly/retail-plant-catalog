@@ -8,20 +8,19 @@
 <script>
 import Vue from "vue";
 
-function mapsReady(){
-    return window.google && window.google.maps &&
-      window.google.maps.places &&
-      window.google.maps.places.PlaceAutocompleteElement
-}
 
 export default Vue.extend({
   props: ["address"],
   mounted() {
-    var isMapsReady = false;
-    while (!isMapsReady){
-       isMapsReady = mapsReady();
-    }
-     console.log("Google Places input has mounted successfully");
+    const waitForGoogle = setInterval(() => {
+    if (
+        window.google &&
+        window.google.maps &&
+        window.google.maps.places &&
+        window.google.maps.places.PlaceAutocompleteElement
+    ) {
+        clearInterval(waitForGoogle);
+        console.log("Google Places input has mounted successfully");
     const placeAutocomplete =
       new window.google.maps.places.PlaceAutocompleteElement();
     placeAutocomplete.types = ["geocode"];
@@ -61,7 +60,9 @@ export default Vue.extend({
         });
       }
     );
-  },
+    }
+    }, 100); // Add missing interval time and fix closing brace
+  }
 });
 </script>
 
