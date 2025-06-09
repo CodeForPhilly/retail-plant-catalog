@@ -91,7 +91,6 @@ public class VendorController : BaseController
     /// </remarks>
     [HttpPost]
     [ApiAuthorize]
-    // [ApiExplorerSettings(GroupName = "v2")]
     [Authorize(Roles = "User,Vendor,Admin")]
     [Route("Create")]
     [ProducesResponseType(StatusCodes.Status201Created)]
@@ -103,103 +102,7 @@ public class VendorController : BaseController
 
     public async Task<IActionResult> Create([FromBody] CreateVendorRequest request)
     {
-
-        if (!ModelState.IsValid)
-            return BadRequest(ModelState); // 400
-
-        var userId = UserId;
-
-        if (string.IsNullOrEmpty(userId))
-            return Unauthorized(); // 401
-
-        try
-        {
-            var vendor = VendorMapper.MapToVendor(request, userId);
-
-            var user = userRepository.Get(userId);
-
-            if (user == null)
-                return NotFound("User not found"); // 404
-
-            if (user.RoleEnum == UserType.User)
-            {
-                user.RoleEnum = UserType.Vendor;
-                userRepository.Update(user);
-            }
-
-            vendor.Approved = user.RoleEnum == UserType.Admin;
-
-            // Capture URLs before creating the vendor
-            var submittedUrls = vendor.PlantListingUris?.Select(u => u.Uri).ToArray() ?? Array.Empty<string>(); ;
-
-            // Create the vendor first
-            await vendorService.CreateAsync(vendor);
-
-            // Now that we have a vendor ID, properly test and add URLs with validation status
-            if (submittedUrls.Any())
-            {
-                plantCrawler.Init();
-                foreach (var url in submittedUrls)
-                {
-                    try
-                    {
-                        // Test each URL
-                        var result = await plantCrawler.TestUrl(url);
-
-                        // Create VendorUrl with test results
-                        string urlId = Guid.NewGuid().ToString();
-                        var vendorUrl = new VendorUrl
-                        {
-                            Id = urlId,
-                            Uri = url,
-                            VendorId = vendor.Id,
-                            LastStatus = result.Status,
-                            LastFailed = result.Status != CrawlStatus.Ok ? DateTime.Now : null,
-                            LastSucceeded = result.Status == CrawlStatus.Ok ? DateTime.UtcNow : null
-                        };
-
-                        // Save to database
-                        await vendorUrlRepository.InsertAsync(vendorUrl);
-
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error($"Error testing URL during vendor creation: {url}", ex);
-                        // Still create the URL entry but mark it with an error status
-                        await vendorUrlRepository.InsertAsync(new VendorUrl
-                        {
-                            Id = Guid.NewGuid().ToString(),
-                            Uri = url,
-                            VendorId = vendor.Id,
-                            LastStatus = CrawlStatus.UrlParsingError,
-                            LastFailed = DateTime.UtcNow
-                        });
-                    }
-                }
-
-                // Update the vendor with the proper crawl error count
-                var updatedVendor = vendorService.GetPopulatedVendor(vendor.Id!);
-                if (updatedVendor.PlantListingUris != null)
-                {
-                    updatedVendor.CrawlErrors = updatedVendor.PlantListingUris.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok);
-                    vendorRepository.Update(updatedVendor);
-                }
-            }
-            return Created(string.Empty, new
-            {
-                id = vendor.Id,
-                success = true,
-                redirectUrl = User.IsInRole("Admin") ? "/#/vendors" : "/#/"
-
-            }); // 201
-        }
-        catch (Exception glex)
-        {
-            logger.Error("Unhandled exception during vendor creation", glex);
-
-            return StatusCode(500, "An unexpected error occurred."); // 500
-        }
-
+        return await CreateClientHelper(request);
     }
     /// <summary>
     /// Creates a new vendor.
@@ -246,7 +149,12 @@ public class VendorController : BaseController
 
     public async Task<IActionResult> CreateClient([FromBody] CreateVendorRequest request)
     {
+        return await CreateClientHelper(request);
 
+    }
+
+    private async Task<IActionResult> CreateClientHelper(CreateVendorRequest request)
+    {
         if (!ModelState.IsValid)
             return BadRequest(ModelState); // 400
 
@@ -342,7 +250,6 @@ public class VendorController : BaseController
 
             return StatusCode(500, "An unexpected error occurred."); // 500
         }
-
     }
 
     /// <summary>
@@ -385,57 +292,7 @@ public class VendorController : BaseController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> Update([FromBody] UpdateVendorRequest request)
     {
-        if (!ModelState.IsValid)
-        {
-            var errors = string.Join("; ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
-            logger.Error($"Vendor update failed: invalid model state: {errors}");
-            return BadRequest(ModelState); // 400
-        }
-
-        try
-        {
-            logger.Info("Updating vendor", request);
-            Vendor existingVendor = vendorRepository.Get(request.Id);
-            if (existingVendor == null)
-            {
-                logger.Warn($"Vendor not found: {request.Id}");
-                return NotFound("Vendor not found."); // 404
-            }
-
-            // Update basic vendor information
-            VendorMapper.MapUpdateToVendor(request, existingVendor);
-
-            // Get existing URLs for this vendor
-            var existingUrls = vendorUrlRepository.FindForVendor(existingVendor.Id!).ToList();
-
-            // Get the list of URLs being submitted
-            var submittedUrls = existingVendor.PlantListingUrls?.ToArray();
-            if (submittedUrls == null) submittedUrls = Array.Empty<string>();
-
-            // Find URLs that need to be removed (exist in DB but not in submission)
-            var urlsToRemove = existingUrls.Where(u => !submittedUrls.Contains(u.Uri));
-            foreach (var url in urlsToRemove)
-            {
-                vendorUrlRepository.Delete(url);
-            }
-
-            // Save the submitted URLs
-            var uri = await vendorService.TestAndSaveUrls(existingVendor.Id!, submittedUrls.ToArray(), plantCrawler);
-            existingVendor.PlantListingUris = uri.ToArray();
-            existingVendor.CrawlErrors = existingVendor.PlantListingUris?.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok) ?? 0;
-            vendorRepository.Update(existingVendor);
-
-            return Ok(new
-            {
-                message = "Vendor update successful",
-                redirectUrl = User.IsInRole("Admin") ? "/#/vendors" : "/#/"
-            }); // 200
-        }
-        catch (Exception ex)
-        {
-            logger.Error("Unhandled exception during vendor update", ex);
-            return StatusCode(500, "An unexpected server error occurred."); // 500
-        }
+        return await VendorUpdate(request);
     }
 
     [HttpPut]
@@ -449,6 +306,11 @@ public class VendorController : BaseController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> UpdateClient([FromBody] UpdateVendorRequest request)
+    {
+        return await VendorUpdate(request);
+    }
+
+    private async Task<IActionResult> VendorUpdate(UpdateVendorRequest request)
     {
         if (!ModelState.IsValid)
         {

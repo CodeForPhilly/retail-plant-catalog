@@ -8,19 +8,20 @@
 <script>
 import Vue from "vue";
 
+function mapsReady(){
+    return window.google && window.google.maps &&
+      window.google.maps.places &&
+      window.google.maps.places.PlaceAutocompleteElement
+}
+
 export default Vue.extend({
   props: ["address"],
   mounted() {
-    if (
-      !window.google ||
-      !window.google.maps ||
-      !window.google.maps.places ||
-      !window.google.maps.places.PlaceAutocompleteElement
-    ) {
-      console.warn("Google Places API did not load correctly");
-      return;
+    var isMapsReady = false;
+    while (!isMapsReady){
+       isMapsReady = mapsReady();
     }
-    console.log("Google Places input has mounted successfully");
+     console.log("Google Places input has mounted successfully");
     const placeAutocomplete =
       new window.google.maps.places.PlaceAutocompleteElement();
     placeAutocomplete.types = ["geocode"];
