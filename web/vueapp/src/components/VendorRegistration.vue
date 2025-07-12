@@ -111,7 +111,7 @@
           <li v-for="error in errors" v-bind:key="error">{{ error }}</li>
         </ul>
       </div>
-      <label class="tos" v-if="!vendor.id && role != 'Admin'">
+      <label class="tos" v-if="!vendor.id && role != 'Admin' && role != 'VolunteerPlus'">
         <input type="checkbox" v-model="agreeToTerms" />I agree to the
         <a href="#">Terms of Service</a>
       </label>
@@ -128,14 +128,14 @@
         type="button"
         class="primary-btn"
         @click="submit()"
-        v-if="!(vendor.id || role == 'Admin')"
+        v-if="!(vendor.id || role == 'Admin' || role == 'VolunteerPlus')"
         value="Submit for Approval"
       />
       <input
         type="button"
         class="primary-btn"
         @click="crawl()"
-        v-if="role == 'Admin' && vendor.id"
+        v-if="(role == 'Admin' || role == 'VolunteerPlus') && vendor.id"
         :disabled="crawlInProgress"
         value="Crawl Site(s)"
       />
@@ -152,7 +152,7 @@
         class="primary-btn save"
         :disabled="crawlInProgress"
         @click="submit()"
-        v-if="vendor.id || role == 'Admin'"
+        v-if="vendor.id || role == 'Admin' || role == 'VolunteerPlus'"
         value="Save"
       />
       <br /><em v-if="crawlInProgress"
@@ -207,7 +207,7 @@ export default Vue.extend({
         this.role = localStorage.getItem('role');
         console.log("Role", this.role)
 
-        if (this.role == 'Admin' )
+        if (this.role == 'Admin' || this.role == 'VolunteerPlus')
         {
             if (id != null){
                 await utils.getData(`/vendor/get?id=${id}`)
@@ -317,7 +317,7 @@ export default Vue.extend({
                     }
                 }
             }
-            if (this.role != 'Admin' && !this.agreeToTerms && !this.vendor.id){
+            if (this.role != 'Admin' && this.role != 'VolunteerPlus' && !this.agreeToTerms && !this.vendor.id){
                 this.errors.push("You must agree to the terms of service")
             }
             return (this.errors.length === 0)
@@ -374,7 +374,7 @@ export default Vue.extend({
                 }
 
                 // Refresh the vendor data to get updated crawlErrors count
-                if (this.role == 'Admin') {
+                if (this.role == 'Admin' || this.role == 'VolunteerPlus') {
                   await utils.getData(`/vendor/get?id=${this.vendor.id}`)
                   .then(json => {
                     // Preserve the newly added URL while updating
@@ -464,7 +464,7 @@ export default Vue.extend({
                 }
 
                 // Refresh the vendor data to get updated crawlErrors count
-                if (this.role == 'Admin') {
+                if (this.role == 'Admin' || this.role == 'VolunteerPlus') {
                     await utils.getData(`/vendor/get?id=${this.vendor.id}`)
                     .then(json => {
                         this.vendor = json;

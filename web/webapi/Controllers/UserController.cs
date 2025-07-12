@@ -123,6 +123,26 @@ public class UserController : BaseController
         return new GenericResponse { Success = true, Message = "User created Successfully", Id = user.Id };
     }
 
+    [HttpPost]
+    [ApiExplorerSettings(GroupName = "v2")]
+    [Authorize(Roles = "Admin")]
+    [Route("PromoteVolunteerPlus")]
+    public async Task<GenericResponse> PromoteVolunteerPlus(string id)
+    {
+        var user = userRepository.Get(id);
+        logger.Info("Promoting user to VolunteerPlus", user);
+
+        if (user == null) 
+            return new GenericResponse { Success = false, Message = "User not found" };
+        
+        if (user.RoleEnum != UserType.Volunteer)
+            return new GenericResponse { Success = false, Message = "Only Volunteers can be promoted to VolunteerPlus" };
+        
+        user.RoleEnum = UserType.VolunteerPlus;
+        userRepository.Update(user);
+        return new GenericResponse { Success = true, Message = "User promoted to VolunteerPlus successfully", Id = user.Id };
+    }
+
     private async Task SendForgotPassword(User user, Invite invite)
     {
         var url = $"{Request.Scheme}://{Request.Host}/#/forgot-password?id={invite.Id}";
@@ -221,7 +241,7 @@ public class UserController : BaseController
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin,User,Vendor")]
+    [Authorize(Roles = "Admin,User,Volunteer,VolunteerPlus")]
     [ApiExplorerSettings(GroupName = "v2")]
     [Route("GenApi")]
     public ApiResponse GenApi()
@@ -237,7 +257,7 @@ public class UserController : BaseController
     [HttpGet]
     [Route("GetApiKey")]
     [ApiExplorerSettings(GroupName = "v2")]
-    [Authorize(Roles = "User,Admin,Vendor")]
+    [Authorize(Roles = "User,Admin,Volunteer,VolunteerPlus")]
     public GenericResponse GetApi()
     {
         var user = userRepository.Get(UserId);

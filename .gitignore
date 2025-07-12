@@ -1,3 +1,5 @@
+*.env
+
 # globs
 Makefile.in
 *.userprefs

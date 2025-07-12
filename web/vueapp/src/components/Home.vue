@@ -3,7 +3,7 @@
         <h1>Welcome</h1>
    
         <a class="register-vendor" href="/#/vendor-registration">
-            <span v-if="role == 'User'">Register</span><span v-if="role == 'Vendor' || role == 'Admin'">Edit</span> Vendor Listing <span class="material-symbols-outlined">
+            <span v-if="role == 'User'">Register</span><span v-if="role == 'Volunteer' || role == 'VolunteerPlus' || role == 'Admin'">Edit</span> Vendor Listing <span class="material-symbols-outlined">
         arrow_circle_right
         </span></a>
         <a class="get-api" href="/#/api-key">Get API<span class="material-symbols-outlined">

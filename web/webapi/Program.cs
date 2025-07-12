@@ -10,14 +10,31 @@ using MySqlConnector;
 using Repositories;
 using Shared;
 using webapi.Services;
-
+using DotNetEnv;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-
+try
+{
+    var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+    if (File.Exists(envPath))
+    {
+        Env.Load(envPath);
+        Console.WriteLine($"✅ Loaded .env file from: {envPath}");
+    }
+    else
+    {
+        Console.WriteLine($"⚠️  Warning: .env file not found at: {envPath}");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"❌ Error loading .env file: {ex.Message}");
+}
+        
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddControllers();
+builder.Services.AddHttpClient(); 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -100,7 +117,11 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 var app = builder.Build();
 app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "API V1");
+    //c.SwaggerEndpoint("/swagger/v2/swagger.json", "API V2");
+});
 
 app.UseDefaultFiles(new DefaultFilesOptions { DefaultFileNames = new string[] { "index.html" } });
 

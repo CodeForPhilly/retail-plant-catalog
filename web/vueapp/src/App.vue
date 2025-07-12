@@ -11,7 +11,7 @@
       </ul>
     </div>
     <div id="top">
-          <a href="#/vendor-registration" v-if="loggedIn && role == 'Vendor'"><span class="material-symbols-outlined">
+          <a href="#/vendor-registration" v-if="loggedIn && (role == 'Volunteer' || role == 'VolunteerPlus')"><span class="material-symbols-outlined">
             account_circle
             </span>Account</a>
           <a href="#" @click="logout" v-if="loggedIn"><span class="material-symbols-outlined">
@@ -90,10 +90,12 @@ const currentView = computed(() => {
   return routes[path || '/'] || NotFound
 })
 const staticLinks = [
-              {uri:"#/api-registration", text:"Register API", role:"Vendor"},
+              {uri:"#/api-registration", text:"Register API", role:"Volunteer"},
+              {uri:"#/api-registration", text:"Register API", role:"VolunteerPlus"},
               {uri:"#/api-registration", text:"Register API", role:"User"},
               {uri:"#/vendor-registration", text:"Register as Vendor", role:"User"},
-              {uri:"#/vendor-registration", text:"Edit Vendor Listing", role:"Vendor"},
+              {uri:"#/vendor-registration", text:"Edit Vendor Listing", role:"Volunteer"},
+              {uri:"#/vendor-registration", text:"Edit Vendor Listing", role:"VolunteerPlus"},
               {uri:"#/users", text:"Users", role:"Admin"},
               {uri:"#/vendors", text:"Vendors", role:"Admin"},
               {uri:"#/login", text:"Log in", role:"all", hideIfAuth:true}
@@ -136,7 +138,7 @@ export default Vue.extend({
           this.loggedIn = localStorage.getItem("loggedIn");
           var allLinks = this.links.filter(l => l.role == 'all')
           var roleLinks = this.links.filter(l => l.role == this.role && this.loggedIn);
-          this.homeLink = this.role == 'Admin' ? "#/vendors": "#/"
+          this.homeLink = (this.role == 'Admin' || this.role == 'VolunteerPlus') ? "#/vendors": "#/"
        
 
           this.links = [...allLinks, ...roleLinks]

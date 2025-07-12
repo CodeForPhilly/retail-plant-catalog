@@ -62,36 +62,23 @@ public class VendorController : BaseController
     /// Creates a new vendor.
     /// </summary>
     /// <param name="request">The request containing the vendor's information.</param>
-    /// <returns>A 201 Created response with the created vendor ID, or an appropriate error.</returns>
     /// <remarks>
-    /// <b>Request Body:</b>
-    /// <list type="bullet">
-    /// <item><term><c>StoreName</c> (string, required)</term><description>: Name of the vendor's store.</description></item>
-    /// <item><term><c>Address</c> (string, required)</term><description>: Street address of the vendor.</description></item>
-    /// <item><term><c>State</c> (string, required)</term><description>: Two-letter state abbreviation (e.g., "TX").</description></item>
-    /// <item><term><c>Lat</c> (decimal, required)</term><description>: Latitude coordinate.</description></item>
-    /// <item><term><c>Lng</c> (decimal, required)</term><description>: Longitude coordinate.</description></item>
-    /// <item><term><c>StoreUrl</c> (string, optional)</term><description>: Public-facing store URL (must be valid).</description></item>
-    /// <item><term><c>PublicEmail</c> (string, optional)</term><description>: Contact email (must be valid).</description></item>
-    /// <item><term><c>PublicPhone</c> (string, optional)</term><description>: Contact phone number (e.g., "123-456-7890").</description></item>
-    /// <item><term><c>AllNative</c> (bool)</term><description>: Indicates if the vendor only sells native plants.</description></item>
-    /// <item><term><c>Notes</c> (string, optional)</term><description>: Additional vendor notes.</description></item>
-    /// <item><term><c>PlantListingUrls</c> (string[], optional)</term><description>: List of plant listing URLs.</description></item>
-    /// </list>
-    ///
-    /// <b>Response Codes:</b>
-    /// <list type="bullet">
-    /// <item><term>201 Created</term><description>: Vendor created successfully.</description></item>
-    /// <item><term>400 Bad Request</term><description>: Invalid input data.</description></item>
-    /// <item><term>401 Unauthorized</term><description>: Authentication required.</description></item>
-    /// <item><term>403 Forbidden</term><description>: User lacks permission to perform this action.</description></item>
-    /// <item><term>404 Not Found</term><description>: Related resource not found (if applicable).</description></item>
-    /// <item><term>500 Internal Server Error</term><description>: An unexpected server error occurred.</description></item>
-    /// </list>
+    /// The request body should include:
+    /// - <c>StoreName</c> (string, required): Name of the vendor's store.
+    /// - <c>Address</c> (string, required): Street address of the vendor.
+    /// - <c>State</c> (string, required): Two-letter state abbreviation (e.g., "TX").
+    /// - <c>Lat</c> (decimal, required): Latitude coordinate.
+    /// - <c>Lng</c> (decimal, required): Longitude coordinate.
+    /// - <c>StoreUrl</c> (string, optional): Public-facing store URL (must be valid).
+    /// - <c>PublicEmail</c> (string, optional): Contact email (must be valid).
+    /// - <c>PublicPhone</c> (string, optional): Contact phone number (e.g., "123-456-7890").
+    /// - <c>AllNative</c> (bool): Indicates if the vendor only sells native plants.
+    /// - <c>Notes</c> (string, optional): Additional vendor notes.
+    /// - <c>PlantListingUrls</c> (string[], optional): List of plant listing URLs.
     /// </remarks>
     [HttpPost]
     [ApiAuthorize]
-    [Authorize(Roles = "User,Vendor,Admin")]
+    [Authorize(Roles = "User,Volunteer,VolunteerPlus,Admin")]
     [Route("Create")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -104,40 +91,10 @@ public class VendorController : BaseController
     {
         return await CreateClientHelper(request);
     }
-    /// <summary>
-    /// Creates a new vendor.
-    /// </summary>
-    /// <param name="request">The request containing the vendor's information.</param>
-    /// <returns>A 201 Created response with the created vendor ID, or an appropriate error.</returns>
-    /// <remarks>
-    /// <b>Request Body:</b>
-    /// <list type="bullet">
-    /// <item><term><c>StoreName</c> (string, required)</term><description>: Name of the vendor's store.</description></item>
-    /// <item><term><c>Address</c> (string, required)</term><description>: Street address of the vendor.</description></item>
-    /// <item><term><c>State</c> (string, required)</term><description>: Two-letter state abbreviation (e.g., "TX").</description></item>
-    /// <item><term><c>Lat</c> (decimal, required)</term><description>: Latitude coordinate.</description></item>
-    /// <item><term><c>Lng</c> (decimal, required)</term><description>: Longitude coordinate.</description></item>
-    /// <item><term><c>StoreUrl</c> (string, optional)</term><description>: Public-facing store URL (must be valid).</description></item>
-    /// <item><term><c>PublicEmail</c> (string, optional)</term><description>: Contact email (must be valid).</description></item>
-    /// <item><term><c>PublicPhone</c> (string, optional)</term><description>: Contact phone number (e.g., "123-456-7890").</description></item>
-    /// <item><term><c>AllNative</c> (bool)</term><description>: Indicates if the vendor only sells native plants.</description></item>
-    /// <item><term><c>Notes</c> (string, optional)</term><description>: Additional vendor notes.</description></item>
-    /// <item><term><c>PlantListingUrls</c> (string[], optional)</term><description>: List of plant listing URLs.</description></item>
-    /// </list>
-    ///
-    /// <b>Response Codes:</b>
-    /// <list type="bullet">
-    /// <item><term>201 Created</term><description>: Vendor created successfully.</description></item>
-    /// <item><term>400 Bad Request</term><description>: Invalid input data.</description></item>
-    /// <item><term>401 Unauthorized</term><description>: Authentication required.</description></item>
-    /// <item><term>403 Forbidden</term><description>: User lacks permission to perform this action.</description></item>
-    /// <item><term>404 Not Found</term><description>: Related resource not found (if applicable).</description></item>
-    /// <item><term>500 Internal Server Error</term><description>: An unexpected server error occurred.</description></item>
-    /// </list>
-    /// </remarks>
+ 
     [HttpPost]
     [Authorize]
-    [Authorize(Roles = "User,Vendor,Admin")]
+    [Authorize(Roles = "User,Volunteer,VolunteerPlus,Admin")]
     [ApiExplorerSettings(GroupName = "v2")]
     [Route("/Vendor/CreateClient")]
     [ProducesResponseType(StatusCodes.Status201Created)]
@@ -174,11 +131,11 @@ public class VendorController : BaseController
 
             if (user.RoleEnum == UserType.User)
             {
-                user.RoleEnum = UserType.Vendor;
+                user.RoleEnum = UserType.Volunteer;
                 userRepository.Update(user);
             }
 
-            vendor.Approved = user.RoleEnum == UserType.Admin;
+            vendor.Approved = user.RoleEnum == UserType.Admin || user.RoleEnum == UserType.VolunteerPlus;
 
             // Capture URLs before creating the vendor
             var submittedUrls = vendor.PlantListingUris?.Select(u => u.Uri).ToArray() ?? Array.Empty<string>(); ;
@@ -240,7 +197,7 @@ public class VendorController : BaseController
             {
                 id = vendor.Id,
                 success = true,
-                redirectUrl = User.IsInRole("Admin") ? "/#/vendors" : "/#/"
+                redirectUrl = User.IsInRole("Admin") || User.IsInRole("VolunteerPlus") ? "/#/vendors" : "/#/"
 
             }); // 201
         }
@@ -256,15 +213,7 @@ public class VendorController : BaseController
     /// Updates an existing vendor.
     /// </summary>
     /// <param name="request">The request containing the updated vendor information.</param>
-    /// <returns>
-    /// Returns:
-    /// - 200 OK on successful update,
-    /// - 400 Bad Request for invalid input,
-    /// - 401 Unauthorized if the user is unauthenticated,
-    /// - 403 Forbidden if the user does not have permission,
-    /// - 404 Not Found if the vendor does not exist,
-    /// - 500 Internal Server Error for unhandled exceptions.
-    /// </returns>
+    /// <returns></returns>
     /// <remarks>
     /// The request body should include:
     /// - <c>Id</c> (string, required): Unique identifier of the vendor to update.
@@ -282,7 +231,6 @@ public class VendorController : BaseController
     /// </remarks>
     [HttpPut]
     [ApiAuthorize]
-    [Authorize(Roles = "User,Vendor,Admin")]
     [Route("Update")]
     [ProducesResponseType(typeof(void), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -297,7 +245,7 @@ public class VendorController : BaseController
 
     [HttpPut]
     [ApiExplorerSettings(GroupName = "v2")]
-    [Authorize(Roles = "User,Vendor,Admin")]
+    [Authorize(Roles = "User,Volunteer,VolunteerPlus,Admin")]
     [Route("UpdateClient")]
     [ProducesResponseType(typeof(void), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -355,7 +303,7 @@ public class VendorController : BaseController
             return Ok(new
             {
                 message = "Vendor update successful",
-                redirectUrl = User.IsInRole("Admin") ? "/#/vendors" : "/#/"
+                redirectUrl = User.IsInRole("Admin") || User.IsInRole("VolunteerPlus") ? "/#/vendors" : "/#/"
             }); // 200
         }
         catch (Exception ex)
@@ -367,7 +315,7 @@ public class VendorController : BaseController
 
     [HttpGet]
     [ApiExplorerSettings(GroupName = "v2")]
-    [Authorize(Roles = "Admin,User,Vendor")] //Needs user for initial registration validation
+    [Authorize(Roles = "Admin,User,Volunteer,VolunteerPlus")] //Needs user for initial registration validation
     [Route("IsAllowed")]
     public async Task<GenericResponse> IsAllowed([FromQuery] string url)
     {
@@ -392,7 +340,7 @@ public class VendorController : BaseController
     }
     [HttpGet]
     [ApiExplorerSettings(GroupName = "v2")]
-    [Authorize(Roles = "Admin,Vendor,User")]
+    [Authorize(Roles = "Admin,Volunteer,VolunteerPlus,User")]
     [Route("Current")]
     public Vendor Current()
     {
@@ -571,7 +519,7 @@ public class VendorController : BaseController
 
 
     /// <summary>
-    /// Find Vendors by State
+    /// Find vendors by State
     /// </summary>
     /// <param name="state">2 character abbr. of state</param>
     /// <returns></returns>
@@ -583,7 +531,7 @@ public class VendorController : BaseController
         return vendorRepository.FindByState(state);
     }
     /// <summary>
-    /// Find Vendors by plant name
+    /// Find vendors by plant name
     /// </summary>
     /// <param name="plantName">Common or Scientific name of plant</param>
     /// <returns></returns>
@@ -612,7 +560,7 @@ public class VendorController : BaseController
 
     [HttpPost]
     [ApiExplorerSettings(GroupName = "v2")]
-    [Authorize(Roles = "Admin,Vendor")]
+    [Authorize(Roles = "Admin,Volunteer,VolunteerPlus")]
     [Route("TestUrl")]
     public async Task<GenericResponse> TestUrl([FromBody] TestUrlRequest request)
     {
@@ -701,7 +649,7 @@ public class VendorController : BaseController
 
     [HttpPost]
     [ApiExplorerSettings(GroupName = "v2")]
-    [Authorize(Roles = "Admin,User,Vendor")]
+    [Authorize(Roles = "Admin,User,Volunteer,VolunteerPlus")]
     [Route("ValidateUrl")]
     public async Task<GenericResponse> ValidateUrl([FromBody] ValidateUrlRequest request)
     {
@@ -737,6 +685,154 @@ public class VendorController : BaseController
         }
     }
 
+    /// <summary>
+    /// Finds vendor by Id
+    /// </summary>
+    /// <param name="id">Unique identifier for a vendor</param>
+    /// <returns></returns>
+    [HttpGet]
+    [ApiAuthorize]
+    [Route("FindById")]
+    [ProducesResponseType(typeof(void), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public IActionResult FindById([FromQuery] string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return BadRequest("Vendor Id is required");
+
+        var vendor = vendorService.GetPopulatedVendor(id);
+
+        if (vendor == null) return NotFound("Vendor does not exist");
+
+        return Ok(vendor);
+    }
+
+    /// <summary>
+    /// Crawls a vendor by its unique identifier.
+    /// </summary>
+    /// <param name="id">Unique identifier for a vendor</param>
+    /// <returns></returns>
+    [HttpPost]
+    [ApiAuthorize]
+    [Route("CrawlByID")]
+    [ProducesResponseType(typeof(void), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> CrawlById([FromQuery] string id)
+    {
+        var vendor = vendorService.GetPopulatedVendor(id);
+        if (vendor == null) return NotFound();
+        plantCrawler.Init();
+        await plantCrawler.Crawl(vendor);
+        vendor.LastCrawled = DateTime.UtcNow;
+        // Set LastCrawlStatus to the status of the most recent VendorUrl crawl
+        if (vendor.PlantListingUris != null && vendor.PlantListingUris.Length > 0)
+        {
+            var mostRecent = vendor.PlantListingUris
+                .Select(u => new { u.LastStatus, Time = u.LastSucceeded ?? u.LastFailed })
+                .Where(x => x.Time != null)
+                .OrderByDescending(x => x.Time)
+                .FirstOrDefault();
+            vendor.LastCrawlStatus = mostRecent?.LastStatus ?? CrawlStatus.None;
+        }
+        else
+        {
+            vendor.LastCrawlStatus = CrawlStatus.None;
+        }
+        vendorRepository.Update(vendor);
+        return Ok(new
+        {
+            vendor,
+            crawlStatus = vendor.LastCrawlStatus,
+            lastCrawled = vendor.LastCrawled
+        });
+    }
+
+    /// <summary>
+    /// FInds vendors and their plants within radius of zipcode
+    /// </summary>
+    /// <param name="zipcode">5 digit zipcode</param>
+    /// <param name="radius">Radius in miles</param>
+    /// <returns></returns>
+    [HttpGet]
+    [ApiAuthorize]
+    [Route("WithPlantsByZip")]
+    [ProducesResponseType(typeof(void), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public IActionResult GetVendorWithPlantsByZip([FromQuery] string zipcode, [FromQuery] int radius)
+    {
+        if (string.IsNullOrWhiteSpace(zipcode) || zipcode.Length != 5 || !zipcode.All(char.IsDigit))
+        {
+            return BadRequest("Invalid zipcode format. Must be 5 digits.");
+        }
+
+        var zip = zipRepository.GetZipCode(zipcode);
+        if (zip == null) return NotFound("The zipcode was not found");
+
+        // Debug output
+        Console.WriteLine($"Zip: {zipcode}, Lat: {zip.Lat}, Lng: {zip.Lng}");
+
+        var meters = (int)(radius * 1609.34);
+        var vendors = vendorRepository.FindByRadius(zip.Lng, zip.Lat, meters).ToList();
+       
+        if (vendors.Count == 0) return NotFound("No vendors found in this radius");
+
+        var result = vendors.Select(v => new {
+            vendor = v,
+            plants = plantRepository.FindByVendor(v.Id!)
+        });
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Finds vendors and their plants by state
+    /// </summary>
+    /// <param name="state">2 character abbreviation of state</param>
+    /// <returns>
+    /// Returns:
+    /// - 200 OK on successful update,
+    /// - 400 Bad Request for invalid input,
+    /// - 401 Unauthorized if the user is unauthenticated,
+    /// - 403 Forbidden if the user does not have permission,
+    /// - 404 Not Found if the vendor does not exist,
+    /// - 500 Internal Server Error for unhandled exceptions.
+    /// </returns>
+    [HttpGet]
+    [ApiAuthorize]
+    [Route("WithPlantsByState")]
+    [ProducesResponseType(typeof(void), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public IActionResult GetVendorWithPlantsByState([FromQuery] string state)
+    {
+        if (string.IsNullOrWhiteSpace(state) || state.Length != 2 || !state.All(char.IsLetter))
+        {
+            return BadRequest("Invalid state format. Must be 2 letters.");
+        }
+
+        var vendors = vendorRepository.FindByState(state);
+
+        if (vendors.Count() == 0) return NotFound("No vendors found in this state");
+
+        var result = vendors.Select(v => new {
+            vendor = v,
+            plants = plantRepository.FindByVendor(v.Id!)
+        });
+        return Ok(result);
+    }
     public class TestUrlRequest
     {
         public string Url { get; set; }

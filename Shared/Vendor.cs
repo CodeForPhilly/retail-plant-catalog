@@ -38,7 +38,6 @@ namespace Shared
         public string Notes { get; set; } = "";
         public int CrawlErrors { get;set; }
 
-
         [Computed]
         public VendorUrl[]? PlantListingUris { get; set; }
         /// <summary>
@@ -50,6 +49,12 @@ namespace Shared
         public DateTime CreatedAt { get; set; }
 
         public bool IsDeleted {get;set;}
+
+        public DateTime? LastCrawled { get; set; }
+
+        public DateTime? LastChanged { get; set; }
+
+        public CrawlStatus LastCrawlStatus {get;set;} = CrawlStatus.None;
 
     }
 

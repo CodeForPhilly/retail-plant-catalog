@@ -58,7 +58,11 @@ namespace Shared
         User = 0,
         [Description("Admin")]
         Admin = 1,
-        [Description("Vendor")]
-        Vendor =2
+        // [Description("Vendor")]
+        // Vendor =2
+        [Description("Volunteer")] // Replaces Vendor
+        Volunteer = 2,
+        [Description("VolunteerPlus")]
+        VolunteerPlus = 3
     }
 }

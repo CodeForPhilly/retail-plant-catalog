@@ -21,7 +21,7 @@ namespace webapi.Services
             var urls = urlRepository.FindForVendor(vendorId);
             vendor.PlantListingUris = urls.ToArray();
             vendor.PlantListingUrls = urls.Select(u => u.Uri).ToArray();
-            vendor.CrawlErrors = urls.Where(u => u.LastStatus != CrawlStatus.Ok).Count();
+            vendor.CrawlErrors = vendor.PlantListingUris.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok);
             return vendor;
         }
         public async Task<Vendor> GetPopulatedVendorAsync(string vendorId)

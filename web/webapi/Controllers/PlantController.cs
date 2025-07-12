@@ -90,7 +90,7 @@ public class PlantController : BaseController
     /// </summary>
     /// <param name="vendorId"></param>
     /// <returns></returns>
-    [Authorize(Roles ="Admin")]
+    [Authorize(Roles ="Admin,Volunteer,VolunteerPlus")]
     [ApiExplorerSettings(GroupName = "v2")]
     [HttpGet]
     [Route("FindByVendorInternal")]

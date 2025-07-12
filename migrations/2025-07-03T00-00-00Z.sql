@@ -1,0 +1,2 @@
+/*up*/
+ALTER TABLE vendor ADD COLUMN LastCrawled DATETIME NULL, ADD COLUMN LastChanged DATETIME NULL, ADD COLUMN LastCrawlStatus ENUM('Ok', 'UrlParsingError', 'Timeout', 'DnsFailure', 'Missing', 'RobotDenied', 'Redirect', 'None') DEFAULT 'None';

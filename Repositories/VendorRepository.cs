@@ -27,8 +27,9 @@ public class VendorRepository : Repository<Vendor>
         if (obj.Id == null)
             obj.Id = Guid.NewGuid().ToString();
         string point = $"POINT({obj.Lng}, {obj.Lat})";
-        int recordsAffected =  await conn.ExecuteAsync("insert into vendor (Id, UserId, StoreName,  Lat, Lng, Geo,Approved, Address, AllNative, State, StoreUrl, PublicEmail, PublicPhone, PlantCount, CreatedAt, Notes)" +
-            $" values (@Id, @UserId, @StoreName, @Lat, @Lng, {point}, @Approved,@Address,@AllNative, @State,@StoreUrl, @PublicEmail, @PublicPhone, @PlantCount, @CreatedAt, @Notes)", obj);
+        int recordsAffected =  await conn.ExecuteAsync(
+            "insert into vendor (Id, UserId, StoreName, Lat, Lng, Geo, Approved, Address, AllNative, State, StoreUrl, PublicEmail, PublicPhone, PlantCount, CreatedAt, Notes, LastCrawled, LastChanged, LastCrawlStatus) " +
+            "values (@Id, @UserId, @StoreName, @Lat, @Lng, " + point + ", @Approved, @Address, @AllNative, @State, @StoreUrl, @PublicEmail, @PublicPhone, @PlantCount, @CreatedAt, @Notes, @LastCrawled, @LastChanged, @LastCrawlStatus)", obj);
         return recordsAffected;
     }
     public override long Insert(Vendor obj)
@@ -37,15 +38,17 @@ public class VendorRepository : Repository<Vendor>
         if (obj.Id == null)
             obj.Id = Guid.NewGuid().ToString();
         string point = $"POINT({obj.Lng}, {obj.Lat})";
-        var recordsAffected = conn.Execute("insert into vendor (Id, UserId, StoreName,  Lat, Lng, Geo,Approved, Address, AllNative, State, StoreUrl, PublicEmail, PublicPhone, PlantCount, CreatedAt, Notes)" +
-            $" values (@Id, @UserId, @StoreName, @Lat, @Lng, {point}, @Approved,@Address,@AllNative, @State,@StoreUrl, @PublicEmail, @PublicPhone, @PlantCount, @CreatedAt, @Notes)", obj);
+        var recordsAffected = conn.Execute(
+            "insert into vendor (Id, UserId, StoreName, Lat, Lng, Geo, Approved, Address, AllNative, State, StoreUrl, PublicEmail, PublicPhone, PlantCount, CreatedAt, Notes, LastCrawled, LastChanged, LastCrawlStatus) " +
+            "values (@Id, @UserId, @StoreName, @Lat, @Lng, " + point + ", @Approved, @Address, @AllNative, @State, @StoreUrl, @PublicEmail, @PublicPhone, @PlantCount, @CreatedAt, @Notes, @LastCrawled, @LastChanged, @LastCrawlStatus)", obj);
         return recordsAffected;
     }
     public override bool Update(Vendor obj)
     {
         string  point = $"POINT({obj.Lng}, {obj.Lat})";
-
-        conn.Execute($"update vendor set StoreName=@StoreName, Address=@Address, Lng=@Lng, Lat=@Lat, Geo={point}, StoreUrl=@StoreUrl, PublicEmail=@PublicEmail, PublicPhone=@PublicPhone, Approved=@Approved, PlantCount=@PlantCount, AllNative=@AllNative, CrawlErrors=@CrawlErrors, Notes=@Notes where id = @Id", obj);
+        conn.Execute(
+            $"update vendor set StoreName=@StoreName, Address=@Address, Lng=@Lng, Lat=@Lat, Geo={point}, StoreUrl=@StoreUrl, PublicEmail=@PublicEmail, PublicPhone=@PublicPhone, Approved=@Approved, PlantCount=@PlantCount, AllNative=@AllNative, CrawlErrors=@CrawlErrors, Notes=@Notes, LastCrawlStatus=@LastCrawlStatus, LastCrawled=@LastCrawled, LastChanged=@LastChanged where id = @Id",
+            obj);
         return true;
     }
     
