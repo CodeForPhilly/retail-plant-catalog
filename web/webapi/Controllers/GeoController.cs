@@ -11,10 +11,12 @@ namespace webapi.Controllers
     public class GeoController : ControllerBase
     {
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IConfiguration configuration;
 
-        public GeoController(IHttpClientFactory httpClientFactory)
+        public GeoController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
             _httpClientFactory = httpClientFactory;
+            this.configuration = configuration;
         }
 
         /// <summary>
@@ -36,7 +38,7 @@ namespace webapi.Controllers
             if (string.IsNullOrWhiteSpace(address))
                 return BadRequest("Address is required");
             
-            string apiKey = Environment.GetEnvironmentVariable("API_KEY");
+            string apiKey = configuration["API_KEY"];
 
             if (string.IsNullOrWhiteSpace(apiKey))
             {

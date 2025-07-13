@@ -585,4 +585,7 @@ span.material-symbols-outlined {
 .form-holder {
   position: relative;
 }
+div.autocomplete-icon gmp-place-autocomplete{
+  background-color: #fff !important;
+}
 </style>
