@@ -8,61 +8,60 @@
 <script>
 import Vue from "vue";
 
-
 export default Vue.extend({
   props: ["address"],
   mounted() {
     const waitForGoogle = setInterval(() => {
-    if (
+      if (
         window.google &&
         window.google.maps &&
         window.google.maps.places &&
         window.google.maps.places.PlaceAutocompleteElement
-    ) {
+      ) {
         clearInterval(waitForGoogle);
         console.log("Google Places input has mounted successfully");
-    const placeAutocomplete =
-      new window.google.maps.places.PlaceAutocompleteElement();
-    placeAutocomplete.types = ["geocode"];
-    placeAutocomplete.componentRestrictions = { country: ["us"] };
+        const placeAutocomplete =
+          new window.google.maps.places.PlaceAutocompleteElement();
+        placeAutocomplete.types = ["geocode"];
+        placeAutocomplete.componentRestrictions = { country: ["us"] };
 
-    this.$refs.autocompleteContainer.appendChild(placeAutocomplete);
+        this.$refs.autocompleteContainer.appendChild(placeAutocomplete);
 
-    placeAutocomplete.addEventListener(
-      "gmp-select",
-      async ({ placePrediction }) => {
-        const place = placePrediction.toPlace();
-        console.log("User selected " + place.location.l);
-        await place.fetchFields({
-          fields: ["formattedAddress", "location", "addressComponents"],
-        });
+        placeAutocomplete.addEventListener(
+          "gmp-select",
+          async ({ placePrediction }) => {
+            const place = placePrediction.toPlace();
+            console.log("User selected " + place.location.l);
+            await place.fetchFields({
+              fields: ["formattedAddress", "location", "addressComponents"],
+            });
 
-        const lat = place.location.lat();
-        const lng = place.location.lng();
+            const lat = place.location.lat();
+            const lng = place.location.lng();
 
-        const components = place.addressComponents;
+            const components = place.addressComponents;
 
-        const state =
-          components.find((c) =>
-            c.types.includes("administrative_area_level_1")
-          )?.shortText || "";
+            const state =
+              components.find((c) =>
+                c.types.includes("administrative_area_level_1")
+              )?.shortText || "";
 
-        const address = `${components[0]?.shortText || ""} ${
-          components[1]?.shortText || ""
-        }, ${components[2]?.shortText || ""}, ${state}`;
+            const address = `${components[0]?.shortText || ""} ${
+              components[1]?.shortText || ""
+            }, ${components[2]?.shortText || ""}, ${state}`;
 
-        this.$emit("placeChange", {
-          lat,
-          lng,
-          address,
-          state,
-          place,
-        });
+            this.$emit("placeChange", {
+              lat,
+              lng,
+              address,
+              state,
+              place,
+            });
+          }
+        );
       }
-    );
-    }
-    }, 100); // Add missing interval time and fix closing brace
-  }
+    }, 100); // Interval time to wait for Google Maps to load
+  },
 });
 </script>
 

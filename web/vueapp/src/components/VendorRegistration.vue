@@ -1,7 +1,7 @@
 <template>
   <div class="post">
-    <h1 v-if="vendor.storeName == ''">Register as a Vendor</h1>
-    <h1 v-if="vendor.storeName !== ''">Edit Vendor Information</h1>
+    <h1 v-if="vendor.storeName == ''">Register Retail Native Nursery</h1>
+    <h1 v-if="vendor.storeName !== ''">Edit Volunteer Information</h1>
     <div class="form-holder">
       <p>
         <em class="info"
@@ -15,7 +15,7 @@
       <label>
         <input
           type="text"
-          placeholder="Store Name"
+          placeholder="Nursery Name"
           v-model="vendor.storeName" /></label
       ><br />
       <label>
@@ -35,7 +35,7 @@
       <label>
         <input
           type="text"
-          placeholder="Store Url"
+          placeholder="Nursery Url"
           v-on:blur="prependHttp()"
           v-model="vendor.storeUrl"
       /></label>
@@ -56,7 +56,7 @@
       <label>
         <input
           type="text"
-          placeholder="Plant Listing Url"
+          placeholder="Plant Inventory URL"
           v-model="plantListingUrl"
       /></label>
       <a @click="addUrl">
@@ -111,7 +111,10 @@
           <li v-for="error in errors" v-bind:key="error">{{ error }}</li>
         </ul>
       </div>
-      <label class="tos" v-if="!vendor.id && role != 'Admin' && role != 'VolunteerPlus'">
+      <label
+        class="tos"
+        v-if="!vendor.id && role != 'Admin' && role != 'VolunteerPlus'"
+      >
         <input type="checkbox" v-model="agreeToTerms" />I agree to the
         <a href="#">Terms of Service</a>
       </label>
@@ -200,7 +203,12 @@ export default Vue.extend({
         };
     },
     async mounted() {
-        //get vendor for current user, if exists
+              // Check authentication first
+              if (!localStorage.getItem('loggedIn') || !localStorage.getItem('role')) {
+            window.location = '/#/login';
+            return;
+        }
+        //get volunteer for current user, if exists
         console.log("Mounted!")
         var hash = window.location.hash.split('?')
         var id = hash.length > 1 ?  hash[1].split("=")[1] : null;
@@ -347,7 +355,7 @@ export default Vue.extend({
 
            // Test the URL before adding it
            if (this.vendor.id) {
-              // If vendor already exists, use the TestUrl endpoint
+              // If volunteer already exists, use the TestUrl endpoint
               try {
                 this.error = "Testing URL...";
                 const testResult = await utils.postData("/vendor/TestUrl", {
@@ -368,12 +376,12 @@ export default Vue.extend({
                 this.vendor.plantListingUris.push(newUrl);
 
                 if (testResult.success) {
-                  this.error = "URL test successful! URL added.";
+                  this.error = "URL test successful! URL added. Plant count will update when this URL is crawled (typically overnight).";
                 } else {
                   this.error = `URL test warning: ${testResult.message}. URL added but may have issues.`;
                 }
 
-                // Refresh the vendor data to get updated crawlErrors count
+                // Refresh the volunteer data to get updated crawlErrors count
                 if (this.role == 'Admin' || this.role == 'VolunteerPlus') {
                   await utils.getData(`/vendor/get?id=${this.vendor.id}`)
                   .then(json => {
@@ -403,7 +411,7 @@ export default Vue.extend({
                 this.vendor.plantListingUris.push({uri: this.plantListingUrl});
               }
            } else {
-             // If vendor doesn't have an ID yet (new vendor), use the ValidateUrl endpoint
+                           // If volunteer doesn't have an ID yet (new volunteer), use the ValidateUrl endpoint
              try {
                this.error = "Validating URL...";
                const validateResult = await utils.postData("/vendor/ValidateUrl", {
@@ -414,7 +422,7 @@ export default Vue.extend({
 
                // Add URL with validation result status
                const newUrl = {
-                 id: validateResult.id, // This is a temporary ID until vendor is created
+                 id: validateResult.id, // This is a temporary ID until volunteer is created
                  uri: this.plantListingUrl,
                  lastStatus: validateResult.message
                };
@@ -423,7 +431,7 @@ export default Vue.extend({
                this.vendor.plantListingUris.push(newUrl);
 
                if (validateResult.success) {
-                 this.error = "URL validation successful! URL added.";
+                 this.error = "URL validation successful! URL added. Plant count will update when this URL is crawled (typically overnight).";
                } else {
                  this.error = `URL validation warning: ${validateResult.message}. URL added but may have issues.`;
                }
@@ -443,7 +451,7 @@ export default Vue.extend({
         },
         async testExistingUrl(v){
             if (!this.vendor.id) {
-                this.error = "Cannot test URL until vendor is saved.";
+                this.error = "Cannot test URL until volunteer is saved.";
                 return;
             }
 
@@ -463,7 +471,7 @@ export default Vue.extend({
                     this.error = `URL test warning: ${testResult.message}`;
                 }
 
-                // Refresh the vendor data to get updated crawlErrors count
+                // Refresh the volunteer data to get updated crawlErrors count
                 if (this.role == 'Admin' || this.role == 'VolunteerPlus') {
                     await utils.getData(`/vendor/get?id=${this.vendor.id}`)
                     .then(json => {
