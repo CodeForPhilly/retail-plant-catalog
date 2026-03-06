@@ -20,6 +20,8 @@ public static class VendorMapper
             PublicEmail = request.PublicEmail,
             PublicPhone = request.PublicPhone,
             AllNative = request.AllNative,
+            LivePlant = request.LivePlant,
+            Seed = request.Seed,
             Notes = request.Notes ?? string.Empty,
             PlantListingUrls = request.PlantListingUrls.ToArray() ?? Array.Empty<string>(),
             CreatedAt = DateTime.UtcNow,
@@ -38,6 +40,8 @@ public static class VendorMapper
         existingVendor.PublicEmail = request.PublicEmail;
         existingVendor.PublicPhone = request.PublicPhone;
         existingVendor.AllNative = request.AllNative;
+        existingVendor.LivePlant = request.LivePlant;
+        existingVendor.Seed = request.Seed;
         existingVendor.Notes = request.Notes;
         existingVendor.PlantListingUrls = request.PlantListingUrls.ToArray() ?? Array.Empty<string>();
         return existingVendor;

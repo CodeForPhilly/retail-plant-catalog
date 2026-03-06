@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http;
 using System.Text.Json;
@@ -38,7 +38,7 @@ namespace webapi.Controllers
             if (string.IsNullOrWhiteSpace(address))
                 return BadRequest("Address is required");
             
-            string apiKey = configuration["API_KEY"];
+            string? apiKey = configuration["API_KEY"];
 
             if (string.IsNullOrWhiteSpace(apiKey))
             {

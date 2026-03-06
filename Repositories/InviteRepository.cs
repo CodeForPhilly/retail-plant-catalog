@@ -1,4 +1,4 @@
-﻿namespace Repositories;
+namespace Repositories;
 
 using Dapper;
 using Shared;
@@ -9,7 +9,7 @@ public class InviteRepository : Repository<Invite>
     public InviteRepository(IDbConnection connection): base(connection)
     {
     }
-    public Invite Get(string id)
+    public new Invite Get(string id)
     {
         return conn.QueryFirstOrDefault<Invite>("select * from user_invite where Id = @id", new { id });
     }

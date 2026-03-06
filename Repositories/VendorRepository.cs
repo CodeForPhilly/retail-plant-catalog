@@ -1,4 +1,4 @@
-﻿namespace Repositories;
+namespace Repositories;
 
 using Dapper;
 using Shared;
@@ -27,9 +27,10 @@ public class VendorRepository : Repository<Vendor>
         if (obj.Id == null)
             obj.Id = Guid.NewGuid().ToString();
         string point = $"POINT({obj.Lng}, {obj.Lat})";
-        int recordsAffected =  await conn.ExecuteAsync(
-            "insert into vendor (Id, UserId, StoreName, Lat, Lng, Geo, Approved, Address, AllNative, State, StoreUrl, PublicEmail, PublicPhone, PlantCount, CreatedAt, Notes, LastCrawled, LastChanged, LastCrawlStatus) " +
-            "values (@Id, @UserId, @StoreName, @Lat, @Lng, " + point + ", @Approved, @Address, @AllNative, @State, @StoreUrl, @PublicEmail, @PublicPhone, @PlantCount, @CreatedAt, @Notes, @LastCrawled, @LastChanged, @LastCrawlStatus)", obj);
+        var param = VendorInsertParams(obj);
+        int recordsAffected = await conn.ExecuteAsync(
+            "insert into vendor (Id, UserId, StoreName, Lat, Lng, Geo, Approved, Address, AllNative, State, StoreUrl, PublicEmail, PublicPhone, PlantCount, CreatedAt, Notes, LastCrawled, LastChanged, LastCrawlStatus, LivePlant, Seed) " +
+            "values (@Id, @UserId, @StoreName, @Lat, @Lng, " + point + ", @Approved, @Address, @AllNative, @State, @StoreUrl, @PublicEmail, @PublicPhone, @PlantCount, @CreatedAt, @Notes, @LastCrawled, @LastChanged, @LastCrawlStatus, @LivePlant, @Seed)", param);
         return recordsAffected;
     }
     public override long Insert(Vendor obj)
@@ -38,17 +39,67 @@ public class VendorRepository : Repository<Vendor>
         if (obj.Id == null)
             obj.Id = Guid.NewGuid().ToString();
         string point = $"POINT({obj.Lng}, {obj.Lat})";
+        var param = VendorInsertParams(obj);
         var recordsAffected = conn.Execute(
-            "insert into vendor (Id, UserId, StoreName, Lat, Lng, Geo, Approved, Address, AllNative, State, StoreUrl, PublicEmail, PublicPhone, PlantCount, CreatedAt, Notes, LastCrawled, LastChanged, LastCrawlStatus) " +
-            "values (@Id, @UserId, @StoreName, @Lat, @Lng, " + point + ", @Approved, @Address, @AllNative, @State, @StoreUrl, @PublicEmail, @PublicPhone, @PlantCount, @CreatedAt, @Notes, @LastCrawled, @LastChanged, @LastCrawlStatus)", obj);
+            "insert into vendor (Id, UserId, StoreName, Lat, Lng, Geo, Approved, Address, AllNative, State, StoreUrl, PublicEmail, PublicPhone, PlantCount, CreatedAt, Notes, LastCrawled, LastChanged, LastCrawlStatus, LivePlant, Seed) " +
+            "values (@Id, @UserId, @StoreName, @Lat, @Lng, " + point + ", @Approved, @Address, @AllNative, @State, @StoreUrl, @PublicEmail, @PublicPhone, @PlantCount, @CreatedAt, @Notes, @LastCrawled, @LastChanged, @LastCrawlStatus, @LivePlant, @Seed)", param);
         return recordsAffected;
+    }
+
+    private static object VendorInsertParams(Vendor obj)
+    {
+        return new
+        {
+            obj.Id,
+            obj.UserId,
+            obj.StoreName,
+            obj.Lat,
+            obj.Lng,
+            obj.Approved,
+            obj.Address,
+            obj.AllNative,
+            obj.State,
+            obj.StoreUrl,
+            obj.PublicEmail,
+            obj.PublicPhone,
+            obj.PlantCount,
+            obj.CreatedAt,
+            obj.Notes,
+            obj.LastCrawled,
+            obj.LastChanged,
+            LastCrawlStatus = obj.LastCrawlStatus.ToString(),
+            obj.LivePlant,
+            obj.Seed
+        };
     }
     public override bool Update(Vendor obj)
     {
         string  point = $"POINT({obj.Lng}, {obj.Lat})";
+        var param = new
+        {
+            obj.StoreName,
+            obj.Address,
+            obj.Lng,
+            obj.Lat,
+            obj.StoreUrl,
+            obj.PublicEmail,
+            obj.PublicPhone,
+            obj.Approved,
+            obj.PlantCount,
+            obj.AllNative,
+            obj.CrawlErrors,
+            obj.Notes,
+            LastCrawlStatus = obj.LastCrawlStatus.ToString(),
+            obj.LastCrawled,
+            obj.LastChanged,
+            obj.CrawlInProgress,
+            obj.LivePlant,
+            obj.Seed,
+            obj.Id
+        };
         conn.Execute(
-            $"update vendor set StoreName=@StoreName, Address=@Address, Lng=@Lng, Lat=@Lat, Geo={point}, StoreUrl=@StoreUrl, PublicEmail=@PublicEmail, PublicPhone=@PublicPhone, Approved=@Approved, PlantCount=@PlantCount, AllNative=@AllNative, CrawlErrors=@CrawlErrors, Notes=@Notes, LastCrawlStatus=@LastCrawlStatus, LastCrawled=@LastCrawled, LastChanged=@LastChanged where id = @Id",
-            obj);
+            $"update vendor set StoreName=@StoreName, Address=@Address, Lng=@Lng, Lat=@Lat, Geo={point}, StoreUrl=@StoreUrl, PublicEmail=@PublicEmail, PublicPhone=@PublicPhone, Approved=@Approved, PlantCount=@PlantCount, AllNative=@AllNative, CrawlErrors=@CrawlErrors, Notes=@Notes, LastCrawlStatus=@LastCrawlStatus, LastCrawled=@LastCrawled, LastChanged=@LastChanged, CrawlInProgress=@CrawlInProgress, LivePlant=@LivePlant, Seed=@Seed where id = @Id",
+            param);
         return true;
     }
     
@@ -89,6 +140,30 @@ public class VendorRepository : Repository<Vendor>
                 conn.Execute("insert into vendor_urls (Id, VendorId, Uri) values (@id, @vendorId, @uri)", new { id = Guid.NewGuid().ToString(), vendorId, uri = url });
             }
         }
+    }
+
+    /// <summary>
+    /// Returns a vendor that already has this store URL (case-insensitive, trim). Excludes deleted vendors.
+    /// Use for duplicate detection before create.
+    /// </summary>
+    public Vendor? GetByStoreUrl(string storeUrl)
+    {
+        if (string.IsNullOrWhiteSpace(storeUrl)) return null;
+        return conn.QueryFirstOrDefault<Vendor>(
+            "SELECT * FROM vendor WHERE LOWER(TRIM(StoreUrl)) = LOWER(TRIM(@storeUrl)) AND IsDeleted = false LIMIT 1",
+            new { storeUrl });
+    }
+
+    /// <summary>
+    /// Returns a vendor that has this store URL and is not the given vendor (case-insensitive, trim). Excludes deleted vendors.
+    /// Use for duplicate detection on update so the current vendor can keep its own store URL.
+    /// </summary>
+    public Vendor? GetByStoreUrlExcluding(string storeUrl, string excludeVendorId)
+    {
+        if (string.IsNullOrWhiteSpace(storeUrl) || string.IsNullOrWhiteSpace(excludeVendorId)) return null;
+        return conn.QueryFirstOrDefault<Vendor>(
+            "SELECT * FROM vendor WHERE LOWER(TRIM(StoreUrl)) = LOWER(TRIM(@storeUrl)) AND IsDeleted = false AND Id != @excludeVendorId LIMIT 1",
+            new { storeUrl, excludeVendorId });
     }
 
     public Vendor? FindByUserId(string userId)
@@ -133,5 +208,20 @@ public class VendorRepository : Repository<Vendor>
     {
         var term = $"%{plantName}%";
         return conn.Query<Vendor>("select * from vendor v inner join vendor_plant vp on vp.VendorId = v.Id inner join plant p on p.id = vp.PlantId where v.Approved and not v.IsDeleted and p.ScientificName like @term or p.CommonName like @term", new { term });
+    }
+
+    /// <summary>
+    /// Returns vendor IDs that have at least one plant listing URL that is uncrawled or stale
+    /// (LastSucceeded IS NULL or LastSucceeded &lt; 1 day ago). Only approved, non-deleted vendors.
+    /// </summary>
+    public IEnumerable<string> GetVendorIdsWithUncrawledUrls()
+    {
+        return conn.Query<string>(@"
+            SELECT DISTINCT v.Id
+            FROM vendor v
+            INNER JOIN vendor_urls u ON u.VendorId = v.Id
+            WHERE v.Approved AND NOT v.IsDeleted
+              AND (u.LastSucceeded IS NULL OR u.LastSucceeded < DATE_SUB(NOW(), INTERVAL 1 DAY))
+            ORDER BY v.Id");
     }
 }

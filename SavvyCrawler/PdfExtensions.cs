@@ -1,5 +1,6 @@
-﻿using iTextSharp.text.pdf;
-using iTextSharp.text.pdf.parser;
+using System.Text.RegularExpressions;
+using UglyToad.PdfPig;
+using UglyToad.PdfPig.DocumentLayoutAnalysis.WordExtractor;
 
 namespace SavvyCrawler
 {
@@ -7,15 +8,22 @@ namespace SavvyCrawler
     {
         public static string GetText(MemoryStream ms)
         {
-            PdfReader reader = new PdfReader(ms);
-           
-            string text = string.Empty;
-            for (int page = 1; page <= reader.NumberOfPages; page++)
+            var bytes = ms.ToArray();
+            using var document = PdfDocument.Open(bytes);
+            var parts = new List<string>();
+            foreach (var page in document.GetPages())
             {
-                text += PdfTextExtractor.GetTextFromPage(reader, page);
+                var words = page.GetWords(NearestNeighbourWordExtractor.Instance);
+                if (words.Any())
+                    parts.Add(string.Join(" ", words.Select(w => w.Text)));
+                else
+                    parts.Add(page.Text);
             }
-            reader.Close();
-            return text;
+            var text = string.Join(" ", parts);
+            // Normalize whitespace (including Unicode) and hyphens so phrase matching works
+            text = Regex.Replace(text, @"\s+", " ");
+            text = text.Replace('\u00A0', ' ').Replace('\u2011', '-').Replace('\u2013', '-').Replace('\u2014', '-');
+            return text.Trim();
         }
     }
 }

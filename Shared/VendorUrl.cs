@@ -1,4 +1,4 @@
-﻿using Dapper;
+using Dapper;
 using System.Data;
 using Dapper.Contrib.Extensions;
 using Shared;
@@ -12,7 +12,7 @@ namespace Shared
         [ExplicitKey]
         public string? Id { get; set; }
 
-        public string Uri { get; set; }
+        public string Uri { get; set; } = null!;
 
         public string? VendorId { get; set; }
 
@@ -21,6 +21,25 @@ namespace Shared
         public DateTime? LastFailed { get; set; }
 
         public CrawlStatus LastStatus { get; set; }
+
+        /// <summary>
+        /// Number of distinct plants found when this URL was last successfully crawled.
+        /// </summary>
+        public int? PlantCount { get; set; }
+
+        /// <summary>
+        /// True while this URL is being crawled (drives per-URL spinner in UI).
+        /// </summary>
+        public bool CrawlInProgress { get; set; } = false;
+    }
+
+    /// <summary>
+    /// Export row for vendor_plant junction table (PKs only).
+    /// </summary>
+    public class VendorPlantExportRow
+    {
+        public string VendorId { get; set; } = "";
+        public string PlantId { get; set; } = "";
     }
 
     [JsonConverter(typeof(JsonStringEnumConverter))]

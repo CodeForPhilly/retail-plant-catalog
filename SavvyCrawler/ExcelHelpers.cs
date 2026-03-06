@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using OfficeOpenXml;
 
 namespace SavvyCrawler
@@ -34,7 +34,7 @@ namespace SavvyCrawler
             catch (Exception ex)
             {
                 Console.WriteLine("Error extracting text from Excel file: " + ex.Message);
-                return null;  // Return null on error
+                return string.Empty;
             }
         }
     }
