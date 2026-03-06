@@ -1,9 +1,12 @@
 {
-  "name": "plantagents-mcp-server",
+  "name": "plant-agents-mcp",
   "version": "1.0.0",
   "description": "MCP server for PlantAgents - plants, vendors, crawl and approval tools",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "plant-agents-mcp": "dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
@@ -19,5 +22,8 @@
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }

@@ -1,6 +1,6 @@
 # PlantAgents MCP Server
 
-The PlantAgents MCP (Model Context Protocol) server exposes plants, vendors, crawl, and approval tools so AI assistants (e.g. Cursor) can query and manage vendor and plant data via the existing web API.
+The PlantAgents MCP (Model Context Protocol) server exposes plants, vendors, crawl, and approval tools so AI assistants (e.g. Cursor, Claude Code) can query and manage vendor and plant data via the existing web API.
 
 ## Adding the server to Cursor (mcp.json)
 
@@ -11,16 +11,16 @@ The PlantAgents MCP (Model Context Protocol) server exposes plants, vendors, cra
 
 2. **Add the PlantAgents MCP server**
 
-   Add a new entry under the `mcpServers` key. Example with Bearer token for API authorization:
+   Add a new entry under the `mcpServers` key. Use **npx** to run the published package (no repo clone needed), with the hosted API at `https://app.plantagents.org`:
 
    ```json
    {
      "mcpServers": {
        "plantagents": {
-         "command": "node",
-         "args": ["/ABSOLUTE/PATH/TO/SavvyCrawler/mcp-server/dist/index.js"],
+         "command": "npx",
+         "args": ["-y", "plant-agents-mcp"],
          "env": {
-           "PLANTAGENTS_API_URL": "http://localhost:5000",
+           "PLANTAGENTS_API_URL": "https://app.plantagents.org",
            "PLANTAGENTS_BEARER_TOKEN": "YOUR_API_KEY_HERE"
          }
        }
@@ -28,17 +28,11 @@ The PlantAgents MCP (Model Context Protocol) server exposes plants, vendors, cra
    }
    ```
 
-   Replace:
-   - `/ABSOLUTE/PATH/TO/SavvyCrawler` with your actual repo path (e.g. `/Users/me/SavvyCrawler`).
-   - `YOUR_API_KEY_HERE` with a valid API key (Bearer token) from your user account. See [Bearer token generation](#bearer-token-generation) below.
+   Replace `YOUR_API_KEY_HERE` with a valid API key (Bearer token) from your user account. See [Bearer token generation](#bearer-token-generation) below.
 
-3. **Build the MCP server once** (from repo root):
+3. **Restart Cursor** (or reload the window) so it picks up the new MCP config.
 
-   ```bash
-   cd mcp-server && npm install && npm run build
-   ```
-
-4. **Restart Cursor** (or reload the window) so it picks up the new MCP config.
+**Claude Code:** To use this server in Claude Code instead of Cursor, see [Setting up the PlantAgents MCP server with Claude Code](docs/MCP-Claude-Code-setup.md).
 
 ## Bearer token generation
 
@@ -50,13 +44,15 @@ The MCP server calls the web API with **Bearer token** authentication. You must 
   - **Option B:** If you have DB access, an admin can set or generate a key for a user, e.g. via the repository method that updates `user.ApiKey` (and optionally the user’s “API key” screen if present).
 - **Use in mcp.json:** Put that value in `PLANTAGENTS_BEARER_TOKEN` in the server’s `env` block, as in the example above. Do **not** commit this file with real keys; keep it local or in a secure secret store.
 
+**Claude Code users:** For step-by-step setup of your `mcp.json` (or Claude config) with this API key, see [Setting up the PlantAgents MCP server with Claude Code](docs/MCP-Claude-Code-setup.md).
+
 For more detail on how the web API uses this token, see the main [README](README.md) and the API/auth docs referenced there (including any section on “Bearer token” or “API key”).
 
 ## Environment variables
 
 | Variable | Description |
 |----------|-------------|
-| `PLANTAGENTS_API_URL` | Base URL of the web API (e.g. `http://localhost:5000`). Defaults to `http://localhost:5000` if unset. |
+| `PLANTAGENTS_API_URL` | Base URL of the web API. Use `https://app.plantagents.org` for the hosted app. |
 | `PLANTAGENTS_BEARER_TOKEN` | API key sent as `Authorization: Bearer <token>`. **Required** for authenticated endpoints. |
 
 These are typically set in the `env` block for the server in `mcp.json`, as shown above.
