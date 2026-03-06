@@ -75,3 +75,9 @@ API documentation is generated automatically by the comments above the controlle
 * click the link 
 * drop a user in the user table with your email then utilize the forgot password.
 
+## Bearer token (API key)
+
+The API supports Bearer token authentication for programmatic and MCP access. The token is the user’s **API key** stored in the `user` table (`ApiKey`). An admin can generate or set this (e.g. via the user repository or any admin UI that exposes “Generate API key”). Use the key in the `Authorization` header as `Bearer <your-api-key>`.
+
+**Using the token with the MCP server:** See the root [MCP.md](../MCP.md) for how to add the PlantAgents MCP server to Cursor’s **mcp.json**, including setting `PLANTAGENTS_BEARER_TOKEN` so the MCP server can call the API with your key.
+

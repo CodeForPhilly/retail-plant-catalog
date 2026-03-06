@@ -89,7 +89,7 @@ public class VendorController : BaseController
 
     public async Task<IActionResult> Create([FromBody] CreateVendorRequest request)
     {
-        return await CreateClientHelper(request);
+        return await CreateClientHelper(request, UserId);
     }
  
     [HttpPost]
@@ -106,16 +106,33 @@ public class VendorController : BaseController
 
     public async Task<IActionResult> CreateClient([FromBody] CreateVendorRequest request)
     {
-        return await CreateClientHelper(request);
-
+        return await CreateClientHelper(request, UserId);
     }
 
-    private async Task<IActionResult> CreateClientHelper(CreateVendorRequest request)
+    /// <summary>
+    /// Create a vendor (Bearer auth). Validates for duplicate URLs; returns created vendor with populated URLs.
+    /// </summary>
+    [HttpPost]
+    [ApiAuthorize]
+    [ApiExplorerSettings(GroupName = "v2")]
+    [Route("/Vendor/CreateClientApi")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> CreateClientApi([FromBody] CreateVendorRequest request)
+    {
+        if (!HttpContext.Request.Headers.TryGetValue("Authorization", out var authTokens))
+            return StatusCode(403, new { message = "No Authorization token." });
+        var token = authTokens.FirstOrDefault()?.Split(' ').LastOrDefault() ?? "";
+        var user = userRepository.FindByKey(token);
+        if (user == null || !user.Verified)
+            return StatusCode(403, new { message = "Invalid token." });
+        return await CreateClientHelper(request, user.Id!);
+    }
+
+    private async Task<IActionResult> CreateClientHelper(CreateVendorRequest request, string userId)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState); // 400
-
-        var userId = UserId;
 
         if (string.IsNullOrEmpty(userId))
             return Unauthorized(); // 401
@@ -137,17 +154,35 @@ public class VendorController : BaseController
 
             vendor.Approved = user.RoleEnum == UserType.Admin || user.RoleEnum == UserType.VolunteerPlus;
 
-            // Capture URLs before creating the vendor
-            var submittedUrls = vendor.PlantListingUris?.Select(u => u.Uri).ToArray() ?? Array.Empty<string>(); ;
+            // Capture URLs before creating the vendor (CreateVendorRequest uses PlantListingUrls)
+            var submittedUrls = (vendor.PlantListingUrls ?? Array.Empty<string>()).Where(u => !string.IsNullOrWhiteSpace(u)).ToArray();
+
+            // Reject duplicate URLs in request
+            var distinctUrls = submittedUrls.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (distinctUrls.Length != submittedUrls.Length)
+                return BadRequest(new { message = "Duplicate plant listing URLs are not allowed. Please remove duplicates and try again." });
+
+            // Reject if store URL is already used by another vendor
+            var existingByStoreUrl = vendorRepository.GetByStoreUrl(request.StoreUrl?.Trim() ?? "");
+            if (existingByStoreUrl != null)
+                return BadRequest(new { message = "A vendor with this store URL already exists." });
+
+            // Reject if any plant listing URL is already registered to another vendor
+            foreach (var url in distinctUrls)
+            {
+                var existingByUri = vendorUrlRepository.GetByUriAnyVendor(url);
+                if (existingByUri != null)
+                    return BadRequest(new { message = $"A plant listing URL is already registered to another vendor: {url}" });
+            }
 
             // Create the vendor first
             await vendorService.CreateAsync(vendor);
 
             // Now that we have a vendor ID, properly test and add URLs with validation status
-            if (submittedUrls.Any())
+            if (distinctUrls.Any())
             {
                 plantCrawler.Init();
-                foreach (var url in submittedUrls)
+                foreach (var url in distinctUrls)
                 {
                     try
                     {
@@ -258,6 +293,21 @@ public class VendorController : BaseController
         return await VendorUpdate(request);
     }
 
+    /// <summary>
+    /// Update a vendor (Bearer auth). Validates duplicate URLs in list; returns updated vendor.
+    /// </summary>
+    [HttpPut]
+    [ApiAuthorize]
+    [ApiExplorerSettings(GroupName = "v2")]
+    [Route("UpdateClientApi")]
+    [ProducesResponseType(typeof(void), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateClientApi([FromBody] UpdateVendorRequest request)
+    {
+        return await VendorUpdate(request);
+    }
+
     private async Task<IActionResult> VendorUpdate(UpdateVendorRequest request)
     {
         if (!ModelState.IsValid)
@@ -294,6 +344,27 @@ public class VendorController : BaseController
                 vendorUrlRepository.Delete(url);
             }
 
+            // Reject duplicate URLs in request
+            var distinctSubmitted = submittedUrls.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (distinctSubmitted.Length != submittedUrls.Length)
+            {
+                logger.Warn($"Vendor update rejected: duplicate plant listing URLs for vendor {existingVendor.Id}");
+                return BadRequest(new { message = "Duplicate plant listing URLs are not allowed. Please remove duplicates and try again." });
+            }
+
+            // Reject if store URL is already used by another vendor (exclude current vendor so it can keep its URL)
+            var existingByStoreUrl = vendorRepository.GetByStoreUrlExcluding(request.StoreUrl?.Trim() ?? "", request.Id);
+            if (existingByStoreUrl != null)
+                return BadRequest(new { message = "A vendor with this store URL already exists." });
+
+            // Reject if any plant listing URL is already registered to another vendor
+            foreach (var url in distinctSubmitted)
+            {
+                var existingByUri = vendorUrlRepository.GetByUriAnyVendor(url);
+                if (existingByUri != null && existingByUri.VendorId != request.Id)
+                    return BadRequest(new { message = $"A plant listing URL is already registered to another vendor: {url}" });
+            }
+
             // Save the submitted URLs
             var uri = await vendorService.TestAndSaveUrls(existingVendor.Id!, submittedUrls.ToArray(), plantCrawler);
             existingVendor.PlantListingUris = uri.ToArray();
@@ -314,17 +385,14 @@ public class VendorController : BaseController
     }
 
     [HttpGet]
+    [ApiOrRolesAuthorize("Admin", "User", "Volunteer", "VolunteerPlus")]
     [ApiExplorerSettings(GroupName = "v2")]
-    [Authorize(Roles = "Admin,User,Volunteer,VolunteerPlus")] //Needs user for initial registration validation
     [Route("IsAllowed")]
     public async Task<GenericResponse> IsAllowed([FromQuery] string url)
     {
         try
         {
-            string host;
-            bool robotsLoaded = false;
-            robotsLoaded = false;
-            host = new Uri(url).Host;
+            var host = new Uri(url).Host;
 
             var robotsUrl = $"http://{host}/robots.txt";
             var robots = new Robots("PAC Agent");
@@ -333,11 +401,15 @@ public class VendorController : BaseController
             var allowed = !disallowByDefault || (robots?.IsPathAllowed(url) ?? true);
             return new GenericResponse { Success = allowed };
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return new GenericResponse { Success = true };
         }
     }
+    /// <summary>
+    /// Gets the vendor record for the currently authenticated user.
+    /// </summary>
+    /// <returns>Vendor for the current user, or a new Vendor with UserId set if none. Includes <c>LastCrawled</c> (UTC) when the vendor has been crawled.</returns>
     [HttpGet]
     [ApiExplorerSettings(GroupName = "v2")]
     [Authorize(Roles = "Admin,Volunteer,VolunteerPlus,User")]
@@ -347,6 +419,12 @@ public class VendorController : BaseController
         var vendor = vendorRepository.FindByUserId(UserId);
         return vendor ?? new Vendor { UserId = UserId };
     }
+    /// <summary>
+    /// Gets a vendor by id with populated plant listing URLs and crawl metadata.
+    /// Includes overall LastCrawlStatus, LastCrawled, CrawlErrors, and per-URL LastStatus and PlantCount.
+    /// </summary>
+    /// <param name="id">Unique identifier for the vendor.</param>
+    /// <returns>Vendor including <c>LastCrawled</c> (UTC), <c>LastCrawlStatus</c>, <c>CrawlErrors</c>, and per-URL status in <c>PlantListingUris</c> (LastStatus, PlantCount).</returns>
     [HttpGet]
     [ApiExplorerSettings(GroupName = "v2")]
     [Authorize(Roles = "Admin")]
@@ -355,6 +433,19 @@ public class VendorController : BaseController
     {
         var vendor = vendorService.GetPopulatedVendor(id);
         return vendor;
+    }
+
+    /// <summary>
+    /// List vendors with optional state/approved filter and limit. For MCP and API clients (Bearer auth).
+    /// </summary>
+    [ApiAuthorize]
+    [HttpGet]
+    [ApiExplorerSettings(GroupName = "v2")]
+    [Route("ListClient")]
+    public IEnumerable<Vendor> ListClient([FromQuery] string? state = null, [FromQuery] bool? approved = null, [FromQuery] int limit = 50)
+    {
+        var unapprovedOnly = approved == false;
+        return vendorRepository.Find(null, state ?? "ALL", unapprovedOnly, false, "StoreName", true, 0, Math.Min(Math.Max(limit, 1), 200));
     }
 
     [HttpGet]
@@ -374,21 +465,70 @@ public class VendorController : BaseController
     {
         var vendor = vendorRepository.Get(approvalRequest.Id);
         vendorRepository.Approve(approvalRequest.Id, approvalRequest.Approved);
-        if (approvalRequest.Approved)
+        if (!string.IsNullOrWhiteSpace(vendor?.PublicEmail))
         {
-            await SendApprovalStatus(vendor.PublicEmail, "The Plant Agents Collective approves your status!");
-        }
-        else
-        {
-            await SendApprovalStatus(vendor.PublicEmail, "Unfortunately the Plant Agents Collective has denied your status as a vendor for the following reason: " + approvalRequest.DenialReason);
+            try
+            {
+                if (approvalRequest.Approved)
+                    await SendApprovalStatus(vendor.PublicEmail, "The Plant Agents Collective approves your status!");
+                else
+                    await SendApprovalStatus(vendor.PublicEmail, "Unfortunately the Plant Agents Collective has denied your status as a vendor for the following reason: " + (approvalRequest.DenialReason ?? ""));
+            }
+            catch (Exception ex)
+            {
+                logger.Error("Failed to send approval email; vendor approval still applied.", ex);
+            }
         }
         return true;
     }
+
+    /// <summary>
+    /// Approve or deny a vendor (Bearer auth). Caller must be Admin. Sends email notification.
+    /// </summary>
+    [HttpPost]
+    [ApiAuthorize]
+    [ApiExplorerSettings(GroupName = "v2")]
+    [Route("ApproveClient")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ApproveClient([FromBody] ApprovalRequest approvalRequest)
+    {
+        if (!HttpContext.Request.Headers.TryGetValue("Authorization", out var authTokens))
+            return StatusCode(403, new { message = "No Authorization token." });
+        var token = authTokens.FirstOrDefault()?.Split(' ').LastOrDefault() ?? "";
+        var user = userRepository.FindByKey(token);
+        if (user == null || !user.Verified)
+            return StatusCode(403, new { message = "Invalid token." });
+        if (user.RoleEnum != Shared.UserType.Admin)
+            return StatusCode(403, new { message = "Admin role required." });
+
+        var vendor = vendorRepository.Get(approvalRequest.Id);
+        if (vendor == null) return NotFound("Vendor not found");
+
+        vendorRepository.Approve(approvalRequest.Id, approvalRequest.Approved);
+        if (!string.IsNullOrWhiteSpace(vendor.PublicEmail))
+        {
+            try
+            {
+                if (approvalRequest.Approved)
+                    await SendApprovalStatus(vendor.PublicEmail, "The Plant Agents Collective approves your status!");
+                else
+                    await SendApprovalStatus(vendor.PublicEmail, "Unfortunately the Plant Agents Collective has denied your status as a vendor for the following reason: " + (approvalRequest.DenialReason ?? ""));
+            }
+            catch (Exception ex)
+            {
+                logger.Error("Failed to send approval email; vendor approval still applied.", ex);
+            }
+        }
+        return Ok(new { success = true });
+    }
     private async Task SendApprovalStatus(string email, string copy)
     {
+        if (string.IsNullOrWhiteSpace(email)) return;
         await amazonSes.SendEmailAsync(new SendEmailRequest
         {
-            Source = "fintech@savvyotter.net",
+            Source = "no-reply@plantagents.org",
             Destination = new Destination
             {
                 ToAddresses = new[] { email }.ToList()
@@ -410,30 +550,92 @@ public class VendorController : BaseController
     {
         var vendor = vendorService.GetPopulatedVendor(id);
         if (vendor == null) return false;
+        if (vendor.CrawlInProgress) return false; // prevent concurrent crawl
 
-
-
-        plantCrawler.Init();
-        plantCrawler.Crawl(vendor).Wait();
-        var plants = plantRepository.FindByVendor(vendor.Id);
-        vendor.PlantCount = plants.Count();
-        vendor.CrawlErrors = vendor.PlantListingUris?.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok) ?? 0;
+        vendor.CrawlInProgress = true;
         vendorRepository.Update(vendor);
-        return true;
+        try
+        {
+            plantCrawler.Init();
+            await plantCrawler.Crawl(vendor);
+            vendor.PlantCount = vendor.PlantListingUris?.Sum(u => u.PlantCount ?? 0) ?? 0;
+            vendor.CrawlErrors = vendor.PlantListingUris?.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok) ?? 0;
+            vendor.LastCrawled = DateTime.UtcNow;
+            vendorRepository.Update(vendor);
+            return true;
+        }
+        finally
+        {
+            vendor.CrawlInProgress = false;
+            vendorRepository.Update(vendor);
+        }
+    }
+
+    /// <summary>
+    /// Trigger crawl for a vendor. If urlId is provided, crawls only that plant listing URL; otherwise crawls all URLs.
+    /// Returns 409 if a crawl is already in progress.
+    /// </summary>
+    [HttpPost]
+    [ApiAuthorize]
+    [ApiExplorerSettings(GroupName = "v2")]
+    [Route("CrawlByUrl")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CrawlByUrl([FromQuery] string id, [FromQuery] string? urlId = null)
+    {
+        var vendor = vendorService.GetPopulatedVendor(id);
+        if (vendor == null) return NotFound("Vendor not found");
+        if (vendor.CrawlInProgress) return StatusCode(409, new { message = "A crawl is already in progress for this vendor." });
+
+        if (!string.IsNullOrWhiteSpace(urlId))
+        {
+            plantCrawler.Init();
+            await plantCrawler.CrawlSingleUrl(id, urlId);
+            var updated = vendorService.GetPopulatedVendor(id);
+            return Ok(new { vendor = updated, crawlStatus = updated.LastCrawlStatus, lastCrawled = updated.LastCrawled });
+        }
+
+        vendor.CrawlInProgress = true;
+        vendorRepository.Update(vendor);
+        try
+        {
+            plantCrawler.Init();
+            await plantCrawler.Crawl(vendor);
+            vendor.LastCrawled = DateTime.UtcNow;
+            if (vendor.PlantListingUris != null && vendor.PlantListingUris.Length > 0)
+            {
+                var mostRecent = vendor.PlantListingUris
+                    .Select(u => new { u.LastStatus, Time = u.LastSucceeded ?? u.LastFailed })
+                    .Where(x => x.Time != null)
+                    .OrderByDescending(x => x.Time)
+                    .FirstOrDefault();
+                vendor.LastCrawlStatus = mostRecent?.LastStatus ?? CrawlStatus.None;
+            }
+            vendor.PlantCount = vendor.PlantListingUris?.Sum(u => u.PlantCount ?? 0) ?? 0;
+            vendor.CrawlErrors = vendor.PlantListingUris?.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok) ?? 0;
+            vendorRepository.Update(vendor);
+            return Ok(new { vendor, crawlStatus = vendor.LastCrawlStatus, lastCrawled = vendor.LastCrawled });
+        }
+        finally
+        {
+            vendor.CrawlInProgress = false;
+            vendorRepository.Update(vendor);
+        }
     }
 
     [HttpPost]
     [ApiExplorerSettings(GroupName = "v2")]
 
     [Route("CrawlAll")]
-    public async Task<bool> CrawlAll()
+    public Task<bool> CrawlAll()
     {
         plantCrawler.Init();
         foreach (var vendor in vendorRepository.GetAll())
         {
             if (vendor?.Id == null || !vendor.Approved) continue;
             var populatedVendor = vendorService.GetPopulatedVendor(vendor.Id); //must get the plantlistingUrls
-            if (!populatedVendor.PlantListingUrls.Any()) continue;
+            if (populatedVendor.PlantListingUrls == null || !populatedVendor.PlantListingUrls.Any()) continue;
 
             // Count errors before crawling
             if (populatedVendor.PlantListingUris != null)
@@ -443,11 +645,10 @@ public class VendorController : BaseController
             }
 
             plantCrawler.Crawl(populatedVendor).Wait();
-            var plants = plantRepository.FindByVendor(vendor.Id);
-            populatedVendor.PlantCount = plants.Count();
+            populatedVendor.PlantCount = populatedVendor.PlantListingUris?.Sum(u => u.PlantCount ?? 0) ?? 0;
             vendorRepository.Update(populatedVendor);
         }
-        return true;
+        return Task.FromResult(true);
     }
 
 
@@ -543,24 +744,43 @@ public class VendorController : BaseController
         return vendorRepository.FindByPlant(plantName);
     }
     /// <summary>
-    /// Find vendors within radius of zipcode
+    /// Find vendors within radius of zipcode.
     /// </summary>
     /// <param name="zipcode">5 digit zipcode</param>
     /// <param name="radius">Radius in miles</param>
-    /// <returns></returns>
+    /// <param name="includePlants">When true, each item includes a plants array for that vendor (default false)</param>
+    /// <returns>Vendors, or when includePlants is true, array of { vendor, plants }</returns>
     [ApiAuthorize]
     [HttpGet]
     [Route("FindByZip")]
-    public IEnumerable<VendorPlus> FindByZip([FromQuery] string zipcode, [FromQuery] int radius)
+    public IActionResult FindByZip([FromQuery] string zipcode, [FromQuery] int radius, [FromQuery] bool includePlants = false)
     {
+        if (string.IsNullOrWhiteSpace(zipcode) || zipcode.Length != 5 || !zipcode.All(char.IsDigit))
+            return BadRequest("Invalid zipcode format. Must be 5 digits.");
+
         var zip = zipRepository.GetZipCode(zipcode);
-        if (zip == null) return new List<VendorPlus> { };
-        return FindByRadius(zip.Lat, zip.Lng, radius);
+        if (zip == null)
+        {
+            if (includePlants)
+                return Ok(Array.Empty<object>());
+            return Ok(new List<VendorPlus>());
+        }
+
+        var meters = (int)(radius * 1609.34);
+        var vendors = vendorRepository.FindByRadius(zip.Lng, zip.Lat, meters).ToList();
+
+        if (includePlants)
+        {
+            var result = vendors.Select(v => new { vendor = v, plants = plantRepository.FindByVendor(v.Id!) });
+            return Ok(result);
+        }
+
+        return Ok(vendors);
     }
 
     [HttpPost]
+    [ApiOrRolesAuthorize("Admin", "Volunteer", "VolunteerPlus")]
     [ApiExplorerSettings(GroupName = "v2")]
-    [Authorize(Roles = "Admin,Volunteer,VolunteerPlus")]
     [Route("TestUrl")]
     public async Task<GenericResponse> TestUrl([FromBody] TestUrlRequest request)
     {
@@ -599,6 +819,14 @@ public class VendorController : BaseController
             else
             {
                 vendorUrl.LastFailed = DateTime.UtcNow;
+            }
+
+            // Duplicate check: if this URI already exists for vendor (and is a different row when updating), return error
+            var existingByVendorAndUri = vendorUrlRepository.GetByVendorAndUri(vendor.Id!, request.Url);
+            if (existingByVendorAndUri != null &&
+                (string.IsNullOrEmpty(request.UrlId) || existingByVendorAndUri.Id != request.UrlId))
+            {
+                return new GenericResponse { Success = false, Message = "This plant listing URL is already registered for this vendor.", Id = existingByVendorAndUri.Id };
             }
 
             // Save the URL in the database by inserting or updating
@@ -648,8 +876,8 @@ public class VendorController : BaseController
     }
 
     [HttpPost]
+    [ApiOrRolesAuthorize("Admin", "User", "Volunteer", "VolunteerPlus")]
     [ApiExplorerSettings(GroupName = "v2")]
-    [Authorize(Roles = "Admin,User,Volunteer,VolunteerPlus")]
     [Route("ValidateUrl")]
     public async Task<GenericResponse> ValidateUrl([FromBody] ValidateUrlRequest request)
     {
@@ -716,41 +944,77 @@ public class VendorController : BaseController
     /// <param name="id">Unique identifier for a vendor</param>
     /// <returns></returns>
     [HttpPost]
-    [ApiAuthorize]
+    [ApiOrAdminAuthorize]
     [Route("CrawlByID")]
     [ProducesResponseType(typeof(void), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> CrawlById([FromQuery] string id)
     {
         var vendor = vendorService.GetPopulatedVendor(id);
         if (vendor == null) return NotFound();
-        plantCrawler.Init();
-        await plantCrawler.Crawl(vendor);
-        vendor.LastCrawled = DateTime.UtcNow;
-        // Set LastCrawlStatus to the status of the most recent VendorUrl crawl
-        if (vendor.PlantListingUris != null && vendor.PlantListingUris.Length > 0)
-        {
-            var mostRecent = vendor.PlantListingUris
-                .Select(u => new { u.LastStatus, Time = u.LastSucceeded ?? u.LastFailed })
-                .Where(x => x.Time != null)
-                .OrderByDescending(x => x.Time)
-                .FirstOrDefault();
-            vendor.LastCrawlStatus = mostRecent?.LastStatus ?? CrawlStatus.None;
-        }
-        else
-        {
-            vendor.LastCrawlStatus = CrawlStatus.None;
-        }
+        if (vendor.CrawlInProgress) return StatusCode(409, new { message = "A crawl is already in progress for this vendor." });
+
+        vendor.CrawlInProgress = true;
         vendorRepository.Update(vendor);
+        try
+        {
+            plantCrawler.Init();
+            await plantCrawler.Crawl(vendor);
+            vendor.LastCrawled = DateTime.UtcNow;
+            // Set LastCrawlStatus to the status of the most recent VendorUrl crawl
+            if (vendor.PlantListingUris != null && vendor.PlantListingUris.Length > 0)
+            {
+                var mostRecent = vendor.PlantListingUris
+                    .Select(u => new { u.LastStatus, Time = u.LastSucceeded ?? u.LastFailed })
+                    .Where(x => x.Time != null)
+                    .OrderByDescending(x => x.Time)
+                    .FirstOrDefault();
+                vendor.LastCrawlStatus = mostRecent?.LastStatus ?? CrawlStatus.None;
+            }
+            else
+            {
+                vendor.LastCrawlStatus = CrawlStatus.None;
+            }
+            vendor.PlantCount = vendor.PlantListingUris?.Sum(u => u.PlantCount ?? 0) ?? 0;
+            vendorRepository.Update(vendor);
+            return Ok(new
+            {
+                vendor,
+                crawlStatus = vendor.LastCrawlStatus,
+                lastCrawled = vendor.LastCrawled
+            });
+        }
+        finally
+        {
+            vendor.CrawlInProgress = false;
+            vendorRepository.Update(vendor);
+        }
+    }
+
+    /// <summary>
+    /// Returns crawl status for a vendor (for polling). Includes CrawlInProgress and per-URL CrawlInProgress.
+    /// </summary>
+    [HttpGet]
+    [ApiExplorerSettings(GroupName = "v2")]
+    [Authorize(Roles = "Admin,Volunteer,VolunteerPlus")]
+    [Route("CrawlStatus")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult GetCrawlStatus([FromQuery] string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return BadRequest("id is required");
+        var vendor = vendorService.GetPopulatedVendor(id);
+        if (vendor == null) return NotFound();
         return Ok(new
         {
-            vendor,
-            crawlStatus = vendor.LastCrawlStatus,
-            lastCrawled = vendor.LastCrawled
+            vendorId = vendor.Id,
+            crawlInProgress = vendor.CrawlInProgress,
+            urlCrawlInProgress = vendor.PlantListingUris?.Select(u => new { urlId = u.Id, crawlInProgress = u.CrawlInProgress }).ToArray()
         });
     }
 
@@ -835,13 +1099,13 @@ public class VendorController : BaseController
     }
     public class TestUrlRequest
     {
-        public string Url { get; set; }
-        public string VendorId { get; set; }
+        public string Url { get; set; } = null!;
+        public string VendorId { get; set; } = null!;
         public string? UrlId { get; set; }
     }
 
     public class ValidateUrlRequest
     {
-        public string Url { get; set; }
+        public string Url { get; set; } = null!;
     }
 }

@@ -6,8 +6,8 @@ namespace Shared
 {
     public class UserRequest
     {
-        public User User { get; set; }
-        public string RedirectUrl { get; set; }
+        public User User { get; set; } = null!;
+        public string RedirectUrl { get; set; } = null!;
     }
     [Table("user")]
     public class User

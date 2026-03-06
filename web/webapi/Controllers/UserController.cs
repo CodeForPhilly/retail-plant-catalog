@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using Repositories;
 using Shared;
@@ -57,25 +57,60 @@ public class UserController : BaseController
     [Route("Create")]
     public async Task<GenericResponse> Create ([FromBody] UserRequest userRequest)
     {
-        var user = userRequest.User;
-        logger.Info("Creating user", user);
-        user.Id = Guid.NewGuid().ToString();
-        var passwordHasher = new PasswordHasher<User>();
-        if (user.Password != null)
-            user.HashedPassword = passwordHasher.HashPassword(user, user.Password);
+        try
+        {
+            if (userRequest?.User == null)
+            {
+                logger.Warn("User create failed: Invalid request (null user or body)");
+                return new GenericResponse { Success = false, Message = "Invalid request" };
+            }
 
-        var existingUser = userRepository.FindByEmail(user.Email);
-        if (existingUser != null)
-            return new GenericResponse { Success = false, Message = "User already exists, please login" };
+            var user = userRequest.User;
+            var email = user.Email?.Trim() ?? "";
+            if (string.IsNullOrEmpty(email))
+            {
+                logger.Warn("User create failed: Email is required");
+                return new GenericResponse { Success = false, Message = "Email is required" };
+            }
 
-        user.RoleEnum = UserType.User;
-        user.CreatedAt = DateTime.UtcNow;
-        user.ModifiedAt = DateTime.UtcNow;
-        userRepository.Insert(user);
-        var invite = new Invite(Guid.NewGuid().ToString(),user.Id, DateTime.UtcNow.AddHours(2), userRequest.RedirectUrl);
-        inviteRepository.Insert(invite);
-        await SendInvite(user, invite);
-        return new GenericResponse { Success = true, Message = "User created Successfully", Id = user.Id};
+            email = email.ToLowerInvariant();
+            user.Email = email;
+
+            logger.Info("Creating user", user);
+            user.Id = Guid.NewGuid().ToString();
+            var passwordHasher = new PasswordHasher<User>();
+            if (user.Password != null)
+                user.HashedPassword = passwordHasher.HashPassword(user, user.Password);
+
+            var existingUser = userRepository.FindByEmail(email);
+            if (existingUser != null)
+            {
+                logger.Info("User create failed: User already exists", new { email });
+                return new GenericResponse { Success = false, Message = "User already exists, please login" };
+            }
+
+            user.RoleEnum = UserType.User;
+            user.CreatedAt = DateTime.UtcNow;
+            user.ModifiedAt = DateTime.UtcNow;
+            userRepository.Insert(user);
+            var invite = new Invite(Guid.NewGuid().ToString(), user.Id, DateTime.UtcNow.AddHours(2), userRequest.RedirectUrl);
+            inviteRepository.Insert(invite);
+            try
+            {
+                await SendInvite(user, invite);
+            }
+            catch (AmazonSimpleEmailServiceException ex)
+            {
+                logger.Error("Verification email could not be sent (AWS SES). User created; they can use Forgot Password.", ex);
+                return new GenericResponse { Success = true, Message = "Account created. We couldn't send the verification email; please use Forgot Password to set your password.", Id = user.Id };
+            }
+            return new GenericResponse { Success = true, Message = "User created Successfully", Id = user.Id };
+        }
+        catch (Exception ex)
+        {
+            logger.Error("Unhandled exception during user creation", ex);
+            throw;
+        }
     }
 
     [HttpPost]
@@ -86,7 +121,7 @@ public class UserController : BaseController
     {
         var user = userRepository.FindByEmail(email);
         if (user == null) return new GenericResponse { Message = "If a user exists then you should have an email", Success = true };
-        var invite = new Invite(Guid.NewGuid().ToString(), user.Id, DateTime.UtcNow.AddHours(2), null);
+        var invite = new Invite(Guid.NewGuid().ToString(), user.Id ?? "", DateTime.UtcNow.AddHours(2), null);
         inviteRepository.Insert(invite);
         await SendForgotPassword(user, invite);
         return new GenericResponse { Message = "If a user exists then you should have an email", Success = true };
@@ -96,51 +131,52 @@ public class UserController : BaseController
     [AllowAnonymous]
     [ApiExplorerSettings(GroupName = "v2")]
     [Route("SetPassword")]
-    public async Task<GenericResponse> SetPassword([FromBody] ResetRequest req)
+    public Task<GenericResponse> SetPassword([FromBody] ResetRequest req)
     {
         logger.Info("Setting password", req);
         var invite = inviteRepository.Get(req.InviteId);
-        if (invite == null || invite.ExpiresAt < DateTime.UtcNow) return new GenericResponse { Message = "Invite not found or expired", Success = false };
+        if (invite == null || invite.ExpiresAt < DateTime.UtcNow) return Task.FromResult(new GenericResponse { Message = "Invite not found or expired", Success = false });
         var user = userRepository.Get(invite.UserId);
+        if (user == null) return Task.FromResult(new GenericResponse { Message = "User not found", Success = false });
         var passwordHasher = new PasswordHasher<User>();
         user.HashedPassword = passwordHasher.HashPassword(user, req.Password);
         userRepository.Update(user);
-        return new GenericResponse { Message = "Password reset successful", Success = true };
+        return Task.FromResult(new GenericResponse { Message = "Password reset successful", Success = true });
     }
 
     [HttpPost]
     [ApiExplorerSettings(GroupName = "v2")]
     [Authorize(Roles = "Admin")]
     [Route("Promote")]
-    public async Task<GenericResponse> Promote(string id)
+    public Task<GenericResponse> Promote(string id)
     {
         var user = userRepository.Get(id);
         logger.Info("Promoting user", user);
 
-        if (user == null) return new GenericResponse { Success = false, Message = "User could not be promoted" };
+        if (user == null) return Task.FromResult(new GenericResponse { Success = false, Message = "User could not be promoted" });
         user.RoleEnum = UserType.Admin;
         userRepository.Update(user);
-        return new GenericResponse { Success = true, Message = "User created Successfully", Id = user.Id };
+        return Task.FromResult(new GenericResponse { Success = true, Message = "User created Successfully", Id = user.Id });
     }
 
     [HttpPost]
     [ApiExplorerSettings(GroupName = "v2")]
     [Authorize(Roles = "Admin")]
     [Route("PromoteVolunteerPlus")]
-    public async Task<GenericResponse> PromoteVolunteerPlus(string id)
+    public Task<GenericResponse> PromoteVolunteerPlus(string id)
     {
         var user = userRepository.Get(id);
         logger.Info("Promoting user to VolunteerPlus", user);
 
         if (user == null) 
-            return new GenericResponse { Success = false, Message = "User not found" };
+            return Task.FromResult(new GenericResponse { Success = false, Message = "User not found" });
         
         if (user.RoleEnum != UserType.Volunteer)
-            return new GenericResponse { Success = false, Message = "Only Volunteers can be promoted to VolunteerPlus" };
+            return Task.FromResult(new GenericResponse { Success = false, Message = "Only Volunteers can be promoted to VolunteerPlus" });
         
         user.RoleEnum = UserType.VolunteerPlus;
         userRepository.Update(user);
-        return new GenericResponse { Success = true, Message = "User promoted to VolunteerPlus successfully", Id = user.Id };
+        return Task.FromResult(new GenericResponse { Success = true, Message = "User promoted to VolunteerPlus successfully", Id = user.Id });
     }
 
     private async Task SendForgotPassword(User user, Invite invite)
@@ -149,7 +185,7 @@ public class UserController : BaseController
         logger.Info("Sending forgot password", url);
         await amazonSes.SendEmailAsync(new SendEmailRequest
         {
-            Source = "fintech@savvyotter.net",
+            Source = "no-reply@plantagents.org",
             Destination = new Destination
             {
                 ToAddresses = new[] { user.Email }.ToList()
@@ -170,7 +206,7 @@ public class UserController : BaseController
         logger.Info("Send invite", url);
         await amazonSes.SendEmailAsync(new SendEmailRequest
         {
-            Source = "fintech@savvyotter.net",
+            Source = "no-reply@plantagents.org",
             Destination = new Destination
             {
                 ToAddresses = new []{ user.Email }.ToList()
@@ -344,7 +380,7 @@ public class ApiResponse
 {
     public string? Value { get; set; }
     public bool Success { get; internal set; }
-    public string Message { get; internal set; }
+    public string Message { get; internal set; } = null!;
 }
 public class GenericResponse
 {

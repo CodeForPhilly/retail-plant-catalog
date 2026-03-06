@@ -412,3 +412,4 @@ web/.gitattributes
 web/.gitignore
 web/vueapp/node_modules
 /.vscode
+web/webapi/wwwroot/*

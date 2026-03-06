@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Text.RegularExpressions;
 using RobotsParser;
 using Shared;
@@ -48,7 +48,7 @@ namespace SavvyCrawler
                 robotsLoaded = false;
                 host = new Uri(absolutePath).Host;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 throw new CrawlFailException(CrawlStatus.UrlParsingError);
             }
@@ -63,7 +63,7 @@ namespace SavvyCrawler
                     await robots.LoadRobotsContent(downloadString);
                     robotsLoaded = true;
                 }
-            }catch(Exception ex)
+            }catch(Exception)
             {
                 //ignore:  Can't parse robots, then no restrictions
             }
@@ -73,11 +73,10 @@ namespace SavvyCrawler
                 if (t.Status == TaskStatus.Canceled) throw new CrawlFailException(CrawlStatus.Timeout);
                 if (t.Exception != null)
                 {
-                    var ex = (t.Exception as AggregateException).InnerException;
-                    if (ex is HttpRequestException)
+                    var ex = (t.Exception as AggregateException)?.InnerException ?? t.Exception;
+                    if (ex is HttpRequestException webex)
                     {
-                        var webex = ex as HttpRequestException;
-                        if (webex != null && webex.HttpRequestError == HttpRequestError.NameResolutionError)
+                        if (webex.HttpRequestError == HttpRequestError.NameResolutionError)
                             throw new CrawlFailException(CrawlStatus.DnsFailure);
                         switch (webex.StatusCode)
                         {
@@ -95,8 +94,7 @@ namespace SavvyCrawler
                     {
                         throw new CrawlFailException(CrawlStatus.Timeout);
                     }
-                    
-
+                    throw new CrawlFailException(CrawlStatus.Missing);
                 }
             });
             //get host and ignore non hosts
@@ -126,7 +124,6 @@ namespace SavvyCrawler
                 var uri = new Uri(absolutePath);
                 var parts = uri.PathAndQuery.Split('?');
                 string text = "";
-                bool isHtml = false;
                 SetDefaultHeaders();
                 if (parts[0].EndsWith(".pdf"))
                 {
@@ -144,7 +141,6 @@ namespace SavvyCrawler
                 else
                 {
                     text = await ParseHtml(absolutePath);
-                    isHtml = true;
                 }
                 Visited.Add(absolutePath);
                 if (!testOnly)
@@ -161,9 +157,8 @@ namespace SavvyCrawler
         }
         public string StripScripts(string html)
         {
-            return html; //need the scripts for hungry plants
-            var scripts = new Regex(@"<script.*?</script>", RegexOptions.Singleline);
-            return scripts.Replace(html, "");
+            // Need the scripts for hungry plants - skip script stripping
+            return html;
         }
     }
 }

@@ -32,6 +32,9 @@ catch (Exception ex)
     Console.WriteLine($"❌ Error loading .env file: {ex.Message}");
 }
         
+// Map CrawlStatus enum to MySQL ENUM strings so Dapper sends 'Ok','UrlParsingError', etc. instead of integers
+SqlMapper.AddTypeHandler(new CrawlStatusTypeHandler());
+
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddControllers();
 builder.Services.AddHttpClient(); 
@@ -45,13 +48,8 @@ builder.Services.AddSwaggerGen(c =>
     {
         Version = "v1",
         Title = "Plant Agents Collective API",
-        Description = "An API for finding native plants",
-        TermsOfService = new Uri("https://example.com/terms"),
-        Contact = new OpenApiContact
-        {
-            Name = "Martin Murphy",
-            Url = new Uri("https://savvyotter.com")
-        }
+        Description = "An API for finding native plants"
+        
     });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -100,10 +98,11 @@ builder.Services.AddTransient<ZipRepository, ZipRepository>();
 builder.Services.AddTransient<PlantRepository, PlantRepository>();
 builder.Services.AddTransient<ApiInfoRepository, ApiInfoRepository>();
 builder.Services.AddTransient<PlantCrawler, PlantCrawler>();
+builder.Services.AddHostedService<ScheduledCrawlService>();
 
 builder.Services.AddTransient(c =>
 {
-    var config = c.GetService<IConfiguration>();
+    var config = c.GetService<IConfiguration>()!;
     var access = config.GetValue<string?>("amazonAccess");
     var secret = config.GetValue<string?>("amazonSecret");
     return new AmazonSimpleEmailServiceClient(access, secret, RegionEndpoint.USEast1);
@@ -115,6 +114,12 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.SlidingExpiration = true;
         options.AccessDeniedPath = "/Forbidden/";
     });
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("ExportPolicy", policy =>
+        policy.Requirements.Add(new webapi.Authorization.ExportDevelopmentRequirement()));
+});
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, webapi.Authorization.ExportDevelopmentHandler>();
 var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -133,7 +138,7 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 
 app.UseAuthorization();
-app.UseExceptionHandler(o => { });
+app.UseExceptionHandler(_ => { });
 app.MapControllers();
 
 app.Run();

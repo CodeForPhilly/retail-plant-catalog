@@ -1,4 +1,4 @@
-﻿namespace Shared
+namespace Shared
 {
     /* {
       "_id": { "$oid": "658c0e2d651b0a3b15331f51" },
@@ -22,21 +22,20 @@
     }*/
     public class Nursery
     {
-        public string Id { get; set; }
-        public string SOURCE { get; set; }
-        public string URL { get; set; }
-        public string Type { get; set; }
-        public string ADDRESS { get; set; }
-        public string CITY { get; set; }
-        public string STATE { get; set; }
-        public string ZIP { get; set; }
-        public string PHONE { get; set; }
-        public string EMAIL { get; set; }
+        public string Id { get; set; } = null!;
+        public string SOURCE { get; set; } = null!;
+        public string URL { get; set; } = null!;
+        public string Type { get; set; } = null!;
+        public string ADDRESS { get; set; } = null!;
+        public string CITY { get; set; } = null!;
+        public string STATE { get; set; } = null!;
+        public string ZIP { get; set; } = null!;
+        public string PHONE { get; set; } = null!;
+        public string EMAIL { get; set; } = null!;
         public decimal Lat { get; set; }
         public decimal Long { get; set; }
-        public string County { get; set; }
-        public string PlantListRaw { get; set; }
-        public string PlantList { get; set; }
-
+        public string County { get; set; } = null!;
+        public string PlantListRaw { get; set; } = null!;
+        public string PlantList { get; set; } = null!;
     }
 }

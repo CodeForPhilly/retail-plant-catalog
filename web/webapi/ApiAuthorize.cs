@@ -25,7 +25,7 @@ namespace webapi
                     return;
                 }
                 context.HttpContext.Response.StatusCode = (int)HttpStatusCode.Forbidden;
-                context.HttpContext.Response.HttpContext.Features.Get<IHttpResponseFeature>().ReasonPhrase = "Not Authorized";
+                context.HttpContext.Response.HttpContext.Features.Get<IHttpResponseFeature>()!.ReasonPhrase = "Not Authorized";
                 context.Result = new JsonResult("NotAuthorized")
                 {
                     Value = new
