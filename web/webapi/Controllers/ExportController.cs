@@ -9,7 +9,8 @@ using Shared;
 namespace webapi.Controllers;
 
 /// <summary>
-/// Bulk export endpoints returning CSV. Admin only.
+/// Bulk export endpoints returning CSV. Allowed for verified API key (Authorization header, same as other API routes),
+/// authenticated Admin, or unauthenticated in Development only.
 /// </summary>
 [ApiController]
 [Route("[controller]")]
