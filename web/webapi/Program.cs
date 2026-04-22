@@ -95,6 +95,7 @@ builder.Services.AddTransient<VendorRepository, VendorRepository>();
 builder.Services.AddTransient<VendorUrlRepository, VendorUrlRepository>();
 builder.Services.AddTransient<VendorService, VendorService>();
 builder.Services.AddTransient<InviteRepository, InviteRepository>();
+builder.Services.AddTransient<RegistrationInviteRepository, RegistrationInviteRepository>();
 builder.Services.AddTransient<ZipRepository, ZipRepository>();
 builder.Services.AddTransient<PlantRepository, PlantRepository>();
 builder.Services.AddTransient<ApiInfoRepository, ApiInfoRepository>();

@@ -38,6 +38,7 @@ import ApiKey from "./components/ApiKey.vue";
 import ApiRegistration from "./components/ApiRegistration.vue";
 import ForgotPassword from "./components/ForgotPassword.vue";
 import ThankYou from "./components/ThankYou.vue";
+import InviteAccept from "./components/InviteAccept.vue";
 
 import Places from "./components/GooglePlacesInput.vue";
 
@@ -61,6 +62,7 @@ const routes = {
   "/login": Login,
   "/forgot-password": ForgotPassword,
   "/thank-you": ThankYou,
+  "/accept-invite": InviteAccept,
   "/places": Places
 };
 
@@ -155,6 +157,11 @@ export default Vue.extend({
             role: "all"
           }
         ];
+        return;
+      }
+
+      if (currentPath === "/accept-invite") {
+        this.links = [{ uri: "#/login", text: "Log in", role: "all" }];
         return;
       }
 
