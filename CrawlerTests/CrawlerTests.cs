@@ -13,7 +13,7 @@ namespace CrawlerTests
             try
             {
                 var counter = new TermCounter("Japonica", "Camellia Black Magic");
-                var crawler = new Crawler(counter);
+                using var crawler = new Crawler(counter);
                 var result = await crawler.Start("https://www.hannasgardenshop.com/dept/11/camellias", 1);
 
             }catch(CrawlFailException ex)
@@ -31,7 +31,7 @@ namespace CrawlerTests
             try
             {
                 var counter = new TermCounter("Japonica", "Camellia Black Magic");
-                var crawler = new Crawler(counter);
+                using var crawler = new Crawler(counter);
                 var result = await crawler.Start("https://hannasgardenshop.com/inventory/search?404=1&q=dept+1asfd+dfds", 1);
 
             }
@@ -49,7 +49,7 @@ namespace CrawlerTests
             try
             {
                 var counter = new TermCounter("Japonica", "Camellia Black Magic");
-                var crawler = new Crawler(counter);
+                using var crawler = new Crawler(counter);
                 var result = await crawler.Start("http://10.255.255.1/dept/11/camellias", 1);
 
             }
@@ -67,7 +67,7 @@ namespace CrawlerTests
             try
             {
                 var counter = new TermCounter("Japonica", "Camellia Black Magic");
-                var crawler = new Crawler(counter);
+                using var crawler = new Crawler(counter);
                 var result = await crawler.Start("https://www.hannasssssgardenshop.com/dept/11/camellias", 1);
 
             }
@@ -85,7 +85,7 @@ namespace CrawlerTests
         {
 			var counter = new TermCounter("Japonica", "Camellia Black Magic");
 
-            var crawler = new Crawler(counter);
+            using var crawler = new Crawler(counter);
 			var result = await crawler.Start("https://hannasgardenshop.com/dept/11/camellias", 1);
 			Assert.True(result["Camellia Black Magic"] > 0);
 		}
@@ -162,7 +162,7 @@ namespace CrawlerTests
 		public async Task CanCrawlGoogleDocs() //robots allowed
 		{
             var counter = new TermCounter("Blazing Star");
-			var crawler = new Crawler(counter);
+			using var crawler = new Crawler(counter);
 			var result = await crawler.Start("https://docs.google.com/document/d/1oXvf0N4k9LXfqYG_s_e9306wCB95DAg740m7cX4Iqc8/edit", 1);
             Assert.Equal(1, result["Blazing Star"]);
         }
@@ -180,7 +180,7 @@ namespace CrawlerTests
         public async Task CanFindSouthernCrabApple()
         {
             var counter = new TermCounter("Wildlife Plants");
-            var crawler = new Crawler(counter);
+            using var crawler = new Crawler(counter);
             var result = await crawler.Start("https://www.bigmulberrynursery.com/plants/", 1);
             Assert.Equal(1, result["Wildlife Plants"]);
         }
@@ -189,7 +189,7 @@ namespace CrawlerTests
         public async Task CanParseCalyx() //robots ALLOWED
         {
             var counter = new TermCounter("Conoclinium coelestinum");
-            var crawler = new Crawler(counter);
+            using var crawler = new Crawler(counter);
             var result = await crawler.Start("https://calyxnativenursery.com/plants/", 1);
             Assert.Equal(1, result["Conoclinium coelestinum"]);
         }
@@ -207,7 +207,7 @@ namespace CrawlerTests
         {
             var url = "https://www.growildinc.com/plant-list/";
             var counter = new TermCounter("Acer leucoderme – Chalk Maple");
-            var crawler = new Crawler(counter);
+            using var crawler = new Crawler(counter);
             var result = await crawler.Start(url, 1);
             Assert.Equal(1, result["Acer leucoderme – Chalk Maple"]);
         }
@@ -261,7 +261,7 @@ namespace CrawlerTests
 		public async Task CanParseXlsxRemote()
 		{
             var counter = new TermCounter("Monarda fistulosa", "Wild Bergamot");
-            var crawler = new Crawler(counter);
+            using var crawler = new Crawler(counter);
             var result = await crawler.Start("https://ginosnursery.com/wp-content/uploads/2022/03/RetailAvailability2022-2.xlsx", 1);
             Assert.Equal(1, result["Monarda fistulosa"]);
             Assert.Equal(1, result["Wild Bergamot"]);

@@ -5,7 +5,7 @@ using Shared;
 
 namespace SavvyCrawler
 {
-    public class Crawler
+    public sealed class Crawler : IDisposable
 	{
 		public List<string> Links { get; set; } = new List<string>();
         public List<string> Visited { get; set; } = new List<string>();
@@ -13,31 +13,36 @@ namespace SavvyCrawler
         private Robots? robots;
         private bool robotsLoaded = false;
         private readonly TermCounter counter;
-        private HttpClient client;
+        private readonly HttpClient client;
+        private bool _disposed;
 
         public Crawler(TermCounter counter) {
             this.counter = counter;
 #pragma warning disable SYSLIB0014 // Type or member is obsolete
             client = new HttpClient();
             client.Timeout = TimeSpan.FromSeconds(5);
-            
-              //
 #pragma warning restore SYSLIB0014 // Type or member is obsolete
-         
         }
+
+        /// <summary>Updates User-Agent (and related defaults) on the single <see cref="HttpClient"/> for this crawl.</summary>
         public void SetDefaultHeaders(bool legacyDevice = false)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            client.DefaultRequestHeaders.UserAgent.Clear();
+            client.DefaultRequestHeaders.Remove("Accept-Encoding");
             if (legacyDevice)
-            {
-                client = new HttpClient();
-                client.DefaultRequestHeaders.Add("User-Agent", "BlackBerry8100/4.2.0 Profile/MIDP-2.0 Configuration/CLDC-1.1 VendorID/155");
-            }
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("BlackBerry8100/4.2.0 Profile/MIDP-2.0 Configuration/CLDC-1.1 VendorID/155");
             else
-            {
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)");
-
-            }
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)");
             client.DefaultRequestHeaders.Add("Accept-Encoding", "none");
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            client.Dispose();
+            GC.SuppressFinalize(this);
         }
 
 

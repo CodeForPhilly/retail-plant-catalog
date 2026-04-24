@@ -109,12 +109,12 @@ static async Task AssociatePlantsToVendors(VendorRepository vendorRepository, Pl
 static async Task Crawl(PlantRepository plantRepository, string[] terms, Dictionary<string, string> plantLookup, Vendor v2)
 {
     var termCounter = new TermCounter(terms);
-    var crawler = new Crawler(termCounter);
     if (v2.PlantListingUrls != null)
     {
         foreach (var uri in v2.PlantListingUrls.Distinct())
         {
-            await crawler.Start(uri, 1);
+            using (var crawler = new Crawler(termCounter))
+                await crawler.Start(uri, 1);
             var termsFound = termCounter.Terms.Where(t => t.Value > 0).Select(t => t.Key);
             foreach (var term in termsFound)
             {

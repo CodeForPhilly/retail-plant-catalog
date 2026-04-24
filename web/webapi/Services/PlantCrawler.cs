@@ -7,11 +7,13 @@ namespace webapi.Services
 {
     public class PlantCrawler
     {
+        private static readonly object PlantCacheLock = new object();
+        private static Dictionary<string, string>? _cachedPlantLookup;
+        private static string[]? _cachedTerms;
+
         private readonly PlantRepository plantRepository;
         private readonly VendorService vendorService;
         private readonly VendorUrlRepository vendorUrlRepository;
-        private readonly Dictionary<string, string> plantLookup = new Dictionary<string, string>(); //term to plantId
-        private string[] terms = new string[] { };
 
         private readonly VendorRepository vendorRepository;
 
@@ -23,26 +25,53 @@ namespace webapi.Services
             this.vendorRepository = vendorRepository;
         }
 
+        /// <summary>Clears the shared plant term cache so the next crawl reloads from the database.</summary>
+        public static void InvalidatePlantCache()
+        {
+            lock (PlantCacheLock)
+            {
+                _cachedPlantLookup = null;
+                _cachedTerms = null;
+            }
+        }
+
         public void Init()
         {
-            terms = plantRepository.GetTerms();
-            var plants = plantRepository.GetAll();
-            foreach (var plant in plants)
+            EnsurePlantCacheLoaded();
+        }
+
+        private void EnsurePlantCacheLoaded()
+        {
+            if (_cachedPlantLookup != null && _cachedTerms != null)
+                return;
+            lock (PlantCacheLock)
             {
-                plantLookup[plant.CommonName] = plant.Id;
-                plantLookup[plant.ScientificName] = plant.Id;
-               // plantLookup[plant.Symbol] = plant.Id;
+                if (_cachedPlantLookup != null && _cachedTerms != null)
+                    return;
+
+                var terms = plantRepository.GetTerms();
+                var lookup = new Dictionary<string, string>();
+                foreach (var plant in plantRepository.GetAll())
+                {
+                    lookup[plant.CommonName] = plant.Id;
+                    lookup[plant.ScientificName] = plant.Id;
+                    // lookup[plant.Symbol] = plant.Id;
+                }
+
+                _cachedTerms = terms;
+                _cachedPlantLookup = lookup;
             }
         }
 
         public async Task<(CrawlStatus Status, Dictionary<string, int> Terms)> TestUrl(string url)
         {
+            EnsurePlantCacheLoaded();
+            var terms = _cachedTerms!;
             var termCounter = new TermCounter(terms);
-            var crawler = new Crawler(termCounter);
-            
             try
             {
-                await crawler.Start(url, 1, true);
+                using (var crawler = new Crawler(termCounter))
+                    await crawler.Start(url, 1, true);
                 return (CrawlStatus.Ok, termCounter.Terms);
             }
             catch (CrawlFailException cfex)
@@ -58,6 +87,8 @@ namespace webapi.Services
         public async Task Crawl(Vendor vendor)
         {
             if (vendor?.Id == null) return; //vendor must have an id to be associated
+            EnsurePlantCacheLoaded();
+            var plantLookup = _cachedPlantLookup!;
             plantRepository.ClearAssociations(vendor.Id);
             if (vendor.PlantListingUris != null)
             {
@@ -67,11 +98,11 @@ namespace webapi.Services
                     await vendorUrlRepository.UpdateAsync(plu);
                     try
                     {
-                        var termCounter = new TermCounter(terms);
-                        var crawler = new Crawler(termCounter);
+                        var termCounter = new TermCounter(_cachedTerms!);
                         try
                         {
-                            await crawler.Start(plu.Uri, 1);
+                            using (var crawler = new Crawler(termCounter))
+                                await crawler.Start(plu.Uri, 1);
                             var termsFound = termCounter.Terms.Where(t => t.Value > 0).Select(t => t.Key);
                             var plantCountThisUrl = 0;
                             foreach (var term in termsFound)
@@ -113,15 +144,17 @@ namespace webapi.Services
             if (vendor?.Id == null || vendor.PlantListingUris == null) return;
             var plu = vendor.PlantListingUris.FirstOrDefault(u => u.Id == urlId);
             if (plu == null) return;
+            EnsurePlantCacheLoaded();
+            var plantLookup = _cachedPlantLookup!;
             plu.CrawlInProgress = true;
             await vendorUrlRepository.UpdateAsync(plu);
             try
             {
-                var termCounter = new TermCounter(terms);
-                var crawler = new Crawler(termCounter);
+                var termCounter = new TermCounter(_cachedTerms!);
                 try
                 {
-                    await crawler.Start(plu.Uri, 1);
+                    using (var crawler = new Crawler(termCounter))
+                        await crawler.Start(plu.Uri, 1);
                     var termsFound = termCounter.Terms.Where(t => t.Value > 0).Select(t => t.Key);
                     var plantCountThisUrl = 0;
                     foreach (var term in termsFound)
