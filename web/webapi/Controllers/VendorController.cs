@@ -637,15 +637,23 @@ public class VendorController : BaseController
             var populatedVendor = vendorService.GetPopulatedVendor(vendor.Id); //must get the plantlistingUrls
             if (populatedVendor.PlantListingUrls == null || !populatedVendor.PlantListingUrls.Any()) continue;
 
-            // Count errors before crawling
-            if (populatedVendor.PlantListingUris != null)
-            {
-                populatedVendor.CrawlErrors = populatedVendor.PlantListingUris?.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok) ?? 0;
-                vendorRepository.Update(populatedVendor);
-            }
-
             plantCrawler.Crawl(populatedVendor).Wait();
+            populatedVendor.LastCrawled = DateTime.UtcNow;
+            if (populatedVendor.PlantListingUris != null && populatedVendor.PlantListingUris.Length > 0)
+            {
+                var mostRecent = populatedVendor.PlantListingUris
+                    .Select(u => new { u.LastStatus, Time = u.LastSucceeded ?? u.LastFailed })
+                    .Where(x => x.Time != null)
+                    .OrderByDescending(x => x.Time)
+                    .FirstOrDefault();
+                populatedVendor.LastCrawlStatus = mostRecent?.LastStatus ?? CrawlStatus.None;
+            }
+            else
+            {
+                populatedVendor.LastCrawlStatus = CrawlStatus.None;
+            }
             populatedVendor.PlantCount = populatedVendor.PlantListingUris?.Sum(u => u.PlantCount ?? 0) ?? 0;
+            populatedVendor.CrawlErrors = populatedVendor.PlantListingUris?.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok) ?? 0;
             vendorRepository.Update(populatedVendor);
         }
         return Task.FromResult(true);
@@ -981,6 +989,7 @@ public class VendorController : BaseController
                 vendor.LastCrawlStatus = CrawlStatus.None;
             }
             vendor.PlantCount = vendor.PlantListingUris?.Sum(u => u.PlantCount ?? 0) ?? 0;
+            vendor.CrawlErrors = vendor.PlantListingUris?.Count(u => u.LastStatus != CrawlStatus.None && u.LastStatus != CrawlStatus.Ok) ?? 0;
             vendorRepository.Update(vendor);
             return Ok(new
             {
@@ -997,7 +1006,7 @@ public class VendorController : BaseController
     }
 
     /// <summary>
-    /// Returns crawl status for a vendor (for polling). Includes CrawlInProgress and per-URL CrawlInProgress.
+    /// Returns crawl status for a vendor (for polling). Includes <c>crawlStatus</c>, <c>lastCrawled</c>, CrawlInProgress, and per-URL CrawlInProgress.
     /// </summary>
     [HttpGet]
     [ApiExplorerSettings(GroupName = "v2")]
@@ -1014,6 +1023,8 @@ public class VendorController : BaseController
         {
             vendorId = vendor.Id,
             crawlInProgress = vendor.CrawlInProgress,
+            crawlStatus = vendor.LastCrawlStatus,
+            lastCrawled = vendor.LastCrawled,
             urlCrawlInProgress = vendor.PlantListingUris?.Select(u => new { urlId = u.Id, crawlInProgress = u.CrawlInProgress }).ToArray()
         });
     }

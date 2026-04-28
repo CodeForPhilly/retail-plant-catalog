@@ -1,0 +1,14 @@
+---
+description: SSH host for PAC production/stage servers and deploy paths
+alwaysApply: true
+---
+
+# PAC production and stage (SSH)
+
+- Shell access to **both production and stage** uses the same host: `ssh ubuntu@pac-stage.savvyotter.com`
+- **Production** app: systemd `pac.service`, working dir `/web/pac`, `dotnet .../webapi.dll` on port **5001**
+- **Stage** app: systemd `pac-stage.service`, working dir `/web/pac-stage`, port **5000**
+- After deploying binaries/assets, restart: `sudo -n systemctl restart pac.service pac-stage.service` (or `sudo systemctl restart …` if a password is required).
+- Do **not** overwrite environment-specific config on deploy. From a local `dotnet publish` output directory, use rsync excludes, for example:
+  `rsync -avz -e ssh --delete --exclude='appsettings.json' --exclude='appsettings.*.json' --exclude='.env' ./publish-out/ ubuntu@pac-stage.savvyotter.com:/web/pac/`  
+  and the same with destination `/web/pac-stage/`.

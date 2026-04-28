@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http;
 using System.Reflection.PortableExecutable;
 using SavvyCrawler;
 using Shared;
@@ -49,7 +51,7 @@ namespace CrawlerTests
             try
             {
                 var counter = new TermCounter("Japonica", "Camellia Black Magic");
-                using var crawler = new Crawler(counter);
+                using var crawler = new Crawler(counter, TimeSpan.FromSeconds(5));
                 var result = await crawler.Start("http://10.255.255.1/dept/11/camellias", 1);
 
             }
@@ -78,6 +80,42 @@ namespace CrawlerTests
             }
 
             Assert.Fail("Should've thrown exception");
+        }
+
+        /// <summary>
+        /// https://www.agrecol.com/ is behind Cloudflare. With a modern Chrome User-Agent the homepage usually returns 200 and
+        /// includes catalog copy; some networks still get 403 (challenge), which maps to <see cref="CrawlStatus.Missing"/> with
+        /// <see cref="HttpRequestException"/> as <see cref="CrawlFailException.InnerException"/>.
+        /// </summary>
+        [Fact]
+        public async Task AgrecolHomepage_ModernUserAgent_AllowsCrawlOrDocumentedCloudflare403()
+        {
+            var counter = new TermCounter("Heliopsis helianthoides");
+            using var crawler = new Crawler(counter);
+            try
+            {
+                var result = await crawler.Start("https://www.agrecol.com/", 1);
+                Assert.True(result.GetValueOrDefault("Heliopsis helianthoides", 0) > 0,
+                    "When CDN returns 200, the homepage should mention Heliopsis helianthoides.");
+            }
+            catch (CrawlFailException ex)
+            {
+                Assert.Equal(CrawlStatus.Missing, ex.CrawlStatus);
+                var inner = Assert.IsType<HttpRequestException>(ex.InnerException);
+                Assert.Equal(HttpStatusCode.Forbidden, inner.StatusCode);
+            }
+        }
+
+        /// <summary>
+        /// Regression: almostedenplants.com serves robots.txt with no classic User-agent rules; Nick.RobotsParser can throw
+        /// when querying rules — crawler must not surface that as <see cref="CrawlStatus.Missing"/>.
+        /// </summary>
+        [Fact]
+        public async Task AlmostEdenHomepage_CrawlDoesNotThrow()
+        {
+            var counter = new TermCounter("Itea");
+            using var crawler = new Crawler(counter);
+            await crawler.Start("https://www.almostedenplants.com/", 1);
         }
 
 		[Fact]

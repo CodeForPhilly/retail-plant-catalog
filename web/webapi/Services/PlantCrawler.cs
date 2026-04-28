@@ -1,4 +1,5 @@
 using System;
+using Microsoft.Extensions.Logging;
 using Repositories;
 using SavvyCrawler;
 using Shared;
@@ -16,13 +17,15 @@ namespace webapi.Services
         private readonly VendorUrlRepository vendorUrlRepository;
 
         private readonly VendorRepository vendorRepository;
+        private readonly ILogger<PlantCrawler> logger;
 
-        public PlantCrawler(PlantRepository plantRepository, VendorService vendorService, VendorUrlRepository vendorUrlRepository, VendorRepository vendorRepository)
+        public PlantCrawler(PlantRepository plantRepository, VendorService vendorService, VendorUrlRepository vendorUrlRepository, VendorRepository vendorRepository, ILogger<PlantCrawler> logger)
         {
             this.plantRepository = plantRepository;
             this.vendorService = vendorService;
             this.vendorUrlRepository = vendorUrlRepository;
             this.vendorRepository = vendorRepository;
+            this.logger = logger;
         }
 
         /// <summary>Clears the shared plant term cache so the next crawl reloads from the database.</summary>
@@ -76,10 +79,13 @@ namespace webapi.Services
             }
             catch (CrawlFailException cfex)
             {
+                if (cfex.CrawlStatus == CrawlStatus.Missing)
+                    logger.LogWarning(cfex, "TestUrl CrawlFail Missing for {Url}", url);
                 return (cfex.CrawlStatus, termCounter.Terms);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                logger.LogError(ex, "TestUrl unexpected exception for {Url}; treating as Missing", url);
                 return (CrawlStatus.Missing, termCounter.Terms);
             }
         }
@@ -92,43 +98,57 @@ namespace webapi.Services
             plantRepository.ClearAssociations(vendor.Id);
             if (vendor.PlantListingUris != null)
             {
-                foreach (var plu in vendor.PlantListingUris)
+                // One HttpClient per vendor reuses connections/DNS to the same store host (avoids socket churn from new client per URL).
+                var termCounter = new TermCounter(_cachedTerms!);
+                using (var crawler = new Crawler(termCounter))
                 {
-                    plu.CrawlInProgress = true;
-                    await vendorUrlRepository.UpdateAsync(plu);
-                    try
+                    foreach (var plu in vendor.PlantListingUris)
                     {
-                        var termCounter = new TermCounter(_cachedTerms!);
+                        plu.CrawlInProgress = true;
+                        await vendorUrlRepository.UpdateAsync(plu);
                         try
                         {
-                            using (var crawler = new Crawler(termCounter))
-                                await crawler.Start(plu.Uri, 1);
-                            var termsFound = termCounter.Terms.Where(t => t.Value > 0).Select(t => t.Key);
-                            var plantCountThisUrl = 0;
-                            foreach (var term in termsFound)
+                            try
                             {
-                                if (plantLookup.ContainsKey(term))
+                                await crawler.Start(plu.Uri, 1);
+                                var termsFound = termCounter.Terms.Where(t => t.Value > 0).Select(t => t.Key);
+                                var plantCountThisUrl = 0;
+                                foreach (var term in termsFound)
                                 {
-                                    var plantId = plantLookup[term];
-                                    plantRepository.Associate(plantId, vendor.Id);
-                                    plantCountThisUrl++;
+                                    if (plantLookup.ContainsKey(term))
+                                    {
+                                        var plantId = plantLookup[term];
+                                        plantRepository.Associate(plantId, vendor.Id);
+                                        plantCountThisUrl++;
+                                    }
                                 }
+                                plu.PlantCount = plantCountThisUrl;
+                                plu.LastStatus = CrawlStatus.Ok;
+                                plu.LastSucceeded = DateTime.UtcNow;
+                                plu.LastFailed = null;
                             }
-                            plu.PlantCount = plantCountThisUrl;
-                            plu.LastSucceeded = DateTime.Now;
+                            catch (CrawlFailException cfex)
+                            {
+                                plu.LastStatus = cfex.CrawlStatus;
+                                plu.LastFailed = DateTime.UtcNow;
+                                plu.PlantCount = null;
+                                if (cfex.CrawlStatus == CrawlStatus.Missing)
+                                    logger.LogWarning(cfex, "Crawl Missing for vendor {VendorId} URL {Uri}", vendor.Id, plu.Uri);
+                            }
+                            catch (Exception ex)
+                            {
+                                logger.LogError(ex, "Crawl unexpected exception for vendor {VendorId} URL {Uri}", vendor.Id, plu.Uri);
+                                plu.LastStatus = CrawlStatus.Missing;
+                                plu.LastFailed = DateTime.UtcNow;
+                                plu.PlantCount = null;
+                            }
+                            await vendorUrlRepository.UpdateAsync(plu);
                         }
-                        catch (CrawlFailException cfex)
+                        finally
                         {
-                            plu.LastStatus = cfex.CrawlStatus;
-                            plu.LastFailed = DateTime.Now;
-                            plu.PlantCount = null;
+                            plu.CrawlInProgress = false;
+                            await vendorUrlRepository.UpdateAsync(plu);
                         }
-                        await vendorUrlRepository.UpdateAsync(plu);
-                    }
-                    finally
-                    {
-                        plu.CrawlInProgress = false;
-                        await vendorUrlRepository.UpdateAsync(plu);
                     }
                 }
             }
@@ -169,10 +189,20 @@ namespace webapi.Services
                     plu.PlantCount = plantCountThisUrl;
                     plu.LastStatus = CrawlStatus.Ok;
                     plu.LastSucceeded = DateTime.UtcNow;
+                    plu.LastFailed = null;
                 }
                 catch (CrawlFailException cfex)
                 {
                     plu.LastStatus = cfex.CrawlStatus;
+                    plu.LastFailed = DateTime.UtcNow;
+                    plu.PlantCount = null;
+                    if (cfex.CrawlStatus == CrawlStatus.Missing)
+                        logger.LogWarning(cfex, "CrawlSingleUrl Missing for vendor {VendorId} URL {Uri}", vendorId, plu.Uri);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "CrawlSingleUrl unexpected exception for vendor {VendorId} URL {Uri}", vendorId, plu.Uri);
+                    plu.LastStatus = CrawlStatus.Missing;
                     plu.LastFailed = DateTime.UtcNow;
                     plu.PlantCount = null;
                 }
