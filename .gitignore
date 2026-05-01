@@ -413,3 +413,4 @@ web/.gitignore
 web/vueapp/node_modules
 /.vscode
 web/webapi/wwwroot/*
+publish_out/*
