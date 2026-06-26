@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Setting up the PlantAgents MCP server with Claude Code</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #333; }
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.2rem; margin-top: 1.5rem; }
+    h3 { font-size: 1rem; margin-top: 1rem; }
+    code, pre { background: #f4f4f4; padding: 0.2em 0.4em; border-radius: 4px; font-size: 0.9em; }
+    pre { padding: 1rem; overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
+    th { background: #f4f4f4; }
+    a { color: #01573e; }
+  </style>
+</head>
+<body>
+  <h1>Setting up the PlantAgents MCP server with Claude Code</h1>
+  <p>This page explains how to add the PlantAgents MCP server to <strong>Claude Code</strong> so Claude can use plants, vendors, crawl, and approval tools.</p>
+
+  <h2>Prerequisites</h2>
+  <ul>
+    <li><a href="https://code.claude.com/">Claude Code</a> installed</li>
+    <li>Node.js 18+ (for <code>npx</code>)</li>
+    <li>A PlantAgents API key (Bearer token). Get one from your app’s <strong>API Key</strong> page (e.g. <strong>Generate API key</strong>), then use it below.</li>
+  </ul>
+
+  <h2>Where Claude Code stores MCP config</h2>
+  <p>Claude Code can use:</p>
+  <ul>
+    <li><strong>User (global):</strong> <code>~/.claude.json</code> or config under <code>~/.claude/</code></li>
+    <li><strong>Project:</strong> <code>.mcp.json</code> in the project root (shared with the team)</li>
+  </ul>
+  <p>Use the scope that fits how you work (just you vs. whole project).</p>
+
+  <h2>Add the PlantAgents MCP server</h2>
+  <p>Run the server with <strong>npx</strong> (no repo clone needed). Open your Claude Code MCP config file (e.g. <code>~/.claude.json</code> or the file used for your scope), ensure there is an <code>mcpServers</code> object, and add a <code>plantagents</code> entry like this:</p>
+  <pre>{
+  "mcpServers": {
+    "plantagents": {
+      "command": "npx",
+      "args": ["-y", "plant-agents-mcp"],
+      "env": {
+        "PLANTAGENTS_API_URL": "https://app.plantagents.org",
+        "PLANTAGENTS_BEARER_TOKEN": "YOUR_API_KEY_HERE"
+      }
+    }
+  }
+}</pre>
+  <p>Replace <code>YOUR_API_KEY_HERE</code> with your API key from the app’s <strong>API Key</strong> page at <a href="https://app.plantagents.org">https://app.plantagents.org</a>. Save the file and restart Claude Code (or reload the window). The server should show up in Claude’s MCP list.</p>
+
+  <h2>Environment variables</h2>
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>PLANTAGENTS_API_URL</code></td><td>Base URL of the PlantAgents web API. Use <code>https://app.plantagents.org</code>.</td></tr>
+      <tr><td><code>PLANTAGENTS_BEARER_TOKEN</code></td><td>Your API key (Bearer token). <strong>Required</strong> for authenticated endpoints.</td></tr>
+    </tbody>
+  </table>
+  <p>Get the API key from your app’s <strong>API Key</strong> page; do not commit it or share it.</p>
+
+  <h2>Verify</h2>
+  <ul>
+    <li>In Claude Code, check that the PlantAgents MCP server is listed (e.g. in MCP or settings).</li>
+    <li>Ask Claude to list plants or vendors; if the server is configured correctly, it will use the MCP tools.</li>
+  </ul>
+
+  <h2>Cursor users</h2>
+  <p>If you use <strong>Cursor</strong> instead of Claude Code, see the main MCP.md in this repo for Cursor’s <code>mcp.json</code> paths and the same env variables.</p>
+</body>
+</html>

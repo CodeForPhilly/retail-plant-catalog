@@ -42,6 +42,12 @@ public class UpdateVendorRequest
 
     public bool AllNative { get; set; }
 
+    /// <summary>True if vendor sells live plants.</summary>
+    public bool LivePlant { get; set; } = true;
+
+    /// <summary>True if vendor sells seed.</summary>
+    public bool Seed { get; set; }
+
     public string Notes { get; set; } = string.Empty;
 
     [MinLength(1, ErrorMessage = "At least one plant listing URL is required.")]

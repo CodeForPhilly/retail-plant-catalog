@@ -49,52 +49,80 @@ namespace webapi.Services
         public async Task<List<VendorUrl>> TestAndSaveUrls(string vendorId, IEnumerable<string> urls, PlantCrawler plantCrawler)
         {
             var results = new List<VendorUrl>();
-            var existingUrls = await urlRepository.FindForVendorAsync(vendorId);
-            
+            var existingUrls = (await urlRepository.FindForVendorAsync(vendorId)).ToList();
+            var seenUris = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var url in urls)
             {
+                if (string.IsNullOrWhiteSpace(url)) continue;
+
+                var normalizedUri = url.Trim();
+                if (!seenUris.Add(normalizedUri))
+                    continue; // Skip duplicate within the same request
+
                 try
                 {
                     // Test each URL
                     var result = await plantCrawler.TestUrl(url);
-                    
-                    // Find existing URL or create new one
-                    var vendorUrl = existingUrls.FirstOrDefault(u => u.Uri == url) ?? 
-                                   new VendorUrl { Id = Guid.NewGuid().ToString(), VendorId = vendorId, Uri = url };
-                    
+
+                    // Find existing URL by vendor + uri (case-insensitive) or create new one
+                    var vendorUrl = existingUrls.FirstOrDefault(u => string.Equals(u.Uri?.Trim(), normalizedUri, StringComparison.OrdinalIgnoreCase))
+                        ?? urlRepository.GetByVendorAndUri(vendorId, url);
+
+                    if (vendorUrl == null)
+                        vendorUrl = new VendorUrl { Id = Guid.NewGuid().ToString(), VendorId = vendorId, Uri = url };
+
                     // Update status
                     vendorUrl.LastStatus = result.Status;
                     vendorUrl.LastFailed = result.Status != CrawlStatus.Ok ? DateTime.UtcNow : vendorUrl.LastFailed;
                     vendorUrl.LastSucceeded = result.Status == CrawlStatus.Ok ? DateTime.UtcNow : vendorUrl.LastSucceeded;
-                    
+
                     // Save to database
-                    if (existingUrls.Any(u => u.Id == vendorUrl.Id))
+                    var alreadyInDb = existingUrls.Any(u => u.Id == vendorUrl.Id);
+                    if (alreadyInDb)
                     {
                         await urlRepository.UpdateAsync(vendorUrl);
                     }
                     else
                     {
-                        await urlRepository.InsertAsync(vendorUrl);
+                        var duplicate = urlRepository.GetByVendorAndUri(vendorId, vendorUrl.Uri ?? "");
+                        if (duplicate != null)
+                        {
+                            await urlRepository.UpdateAsync(vendorUrl);
+                            vendorUrl.Id = duplicate.Id;
+                        }
+                        else
+                        {
+                            await urlRepository.InsertAsync(vendorUrl);
+                        }
+                        existingUrls.Add(vendorUrl);
                     }
-                    
+
                     results.Add(vendorUrl);
                 }
                 catch (Exception)
                 {
-                    // Create URL with error status
-                    var vendorUrl = new VendorUrl { 
-                        Id = Guid.NewGuid().ToString(), 
-                        Uri = url, 
-                        VendorId = vendorId, 
+                    // Create URL with error status (only if not already present)
+                    var duplicate = urlRepository.GetByVendorAndUri(vendorId, url);
+                    if (duplicate != null)
+                    {
+                        results.Add(duplicate);
+                        continue;
+                    }
+                    var vendorUrl = new VendorUrl
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Uri = url,
+                        VendorId = vendorId,
                         LastStatus = CrawlStatus.UrlParsingError,
                         LastFailed = DateTime.UtcNow
                     };
-                    
                     await urlRepository.InsertAsync(vendorUrl);
                     results.Add(vendorUrl);
+                    existingUrls.Add(vendorUrl);
                 }
             }
-            
+
             return results;
         }
         

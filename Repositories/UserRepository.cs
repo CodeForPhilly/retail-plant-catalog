@@ -1,4 +1,4 @@
-﻿namespace Repositories;
+namespace Repositories;
 
 using Dapper;
 using Dapper.Contrib.Extensions;
@@ -27,9 +27,11 @@ public class UserRepository : Repository<User>
         return conn.Query<User>("select * from user where email like @email order by email limit @skip, @take", new { email, skip, take });
     }
 
-    public User FindByEmail(string email)
+    public User? FindByEmail(string? email)
     {
-        return conn.QueryFirstOrDefault<User>("select * from user where Email = @email", new { email });
+        if (string.IsNullOrWhiteSpace(email))
+            return null;
+        return conn.QueryFirstOrDefault<User>("SELECT * FROM user WHERE Email = @email LIMIT 1", new { email = email.Trim() });
     }
 
     public User? FindByKey(string apiKey)

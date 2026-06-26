@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Repositories;
 using Shared;
 using Microsoft.AspNetCore.Authorization;
@@ -20,7 +20,7 @@ public class ApiInfoController: BaseController
     [HttpPost]
     [ApiExplorerSettings(GroupName = "v2")]
     [Route("Create")]
-    public async Task<GenericResponse> Create([FromBody] ApiInfo apiInfo)
+    public Task<GenericResponse> Create([FromBody] ApiInfo apiInfo)
     {
         var existingInfo = apiInfoRepository.FindByUserId(UserId);
         if (existingInfo == null)
@@ -40,6 +40,6 @@ public class ApiInfoController: BaseController
             apiInfoRepository.Update(existingInfo);
         }
 
-        return new GenericResponse { Success = true, Message = "Api Info created Successfully" };
+        return Task.FromResult(new GenericResponse { Success = true, Message = "Api Info created Successfully" });
     }
 }

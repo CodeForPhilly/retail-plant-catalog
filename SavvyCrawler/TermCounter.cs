@@ -1,9 +1,18 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 
 public class TermCounter {
+    private readonly Dictionary<string, Regex> _compiledPatterns;
+
     public TermCounter(params string[] terms) {
         foreach (var term in terms)
             Terms[term] = 0;
+        _compiledPatterns = new Dictionary<string, Regex>(Terms.Count);
+        foreach (var term in Terms.Keys)
+        {
+            var normalized = term.Trim().ToLower();
+            var pattern = @"(?:^|\s|$|\b)" + Regex.Escape(normalized) + @"(?:^|\s|$|\b)";
+            _compiledPatterns[term] = new Regex(pattern, RegexOptions.Compiled);
+        }
     }
 
     public Dictionary<string, int> Terms { get; set; } = new Dictionary<string, int>();
@@ -11,10 +20,8 @@ public class TermCounter {
         content = content.ToLower().Replace("\\n", "\n"); //case insensative.
         foreach (var term in Terms.Keys)
         {
-            var pattern = new Regex(@$"(?:^|\s|$|\b){term.Trim().ToLower()}(?:^|\s|$|\b)");
-            var numFound = pattern.Split(content).Length - 1;
-            if (numFound > 0)
-                Terms[term] = numFound > 0 ? 1 : 0;
+            var numFound = _compiledPatterns[term].Matches(content).Count;
+            Terms[term] = numFound > 0 ? 1 : 0;
         }
         return Terms;
     }

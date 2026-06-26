@@ -1,58 +1,127 @@
-﻿using System.Net;
+using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
 using System.Text.RegularExpressions;
 using RobotsParser;
 using Shared;
 
 namespace SavvyCrawler
 {
-    public class Crawler
+    public sealed class Crawler : IDisposable
 	{
+        /// <summary>Outbound HTTP timeout (TLS + response). Default 5s was too aggressive for slow retail sites.</summary>
+        public static TimeSpan DefaultRequestTimeout { get; set; } = TimeSpan.FromSeconds(45);
+
+        /// <summary>How long pooled connections live before reconnecting (refreshes DNS on long-lived clients).</summary>
+        public static TimeSpan PooledConnectionLifetime { get; set; } = TimeSpan.FromMinutes(5);
+
 		public List<string> Links { get; set; } = new List<string>();
         public List<string> Visited { get; set; } = new List<string>();
         private string? host;
         private Robots? robots;
         private bool robotsLoaded = false;
         private readonly TermCounter counter;
-        private HttpClient client;
+        private readonly HttpClient client;
+        private bool _disposed;
 
-        public Crawler(TermCounter counter) {
+        public Crawler(TermCounter counter, TimeSpan? requestTimeout = null)
+        {
             this.counter = counter;
-#pragma warning disable SYSLIB0014 // Type or member is obsolete
-            client = new HttpClient();
-            client.Timeout = TimeSpan.FromSeconds(5);
-            
-              //
-#pragma warning restore SYSLIB0014 // Type or member is obsolete
-         
+            var handler = new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = PooledConnectionLifetime,
+                AutomaticDecompression = DecompressionMethods.None
+            };
+            client = new HttpClient(handler, disposeHandler: true)
+            {
+                Timeout = requestTimeout ?? DefaultRequestTimeout
+            };
         }
+
+        /// <summary>Updates User-Agent (and related defaults) on the single <see cref="HttpClient"/> for this crawl.</summary>
         public void SetDefaultHeaders(bool legacyDevice = false)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            client.DefaultRequestHeaders.UserAgent.Clear();
+            client.DefaultRequestHeaders.Remove("Accept-Encoding");
             if (legacyDevice)
-            {
-                client = new HttpClient();
-                client.DefaultRequestHeaders.Add("User-Agent", "BlackBerry8100/4.2.0 Profile/MIDP-2.0 Configuration/CLDC-1.1 VendorID/155");
-            }
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("BlackBerry8100/4.2.0 Profile/MIDP-2.0 Configuration/CLDC-1.1 VendorID/155");
             else
-            {
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)");
-
-            }
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
             client.DefaultRequestHeaders.Add("Accept-Encoding", "none");
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            client.Dispose();
+            GC.SuppressFinalize(this);
+        }
+
+        private static Exception Unwrap(Exception ex)
+        {
+            while (ex is AggregateException ae && ae.InnerExceptions.Count > 0)
+                ex = ae.InnerException ?? ae.InnerExceptions[0];
+            return ex;
+        }
+
+        /// <summary>Maps HTTP / socket / cancellation failures to <see cref="CrawlFailException"/>.</summary>
+        internal static void ThrowCrawlFail(Exception ex)
+        {
+            ex = Unwrap(ex);
+            if (ex is CrawlFailException cf)
+                throw cf;
+            if (ex is HttpRequestException webex)
+            {
+                if (webex.HttpRequestError == HttpRequestError.NameResolutionError)
+                    throw new CrawlFailException(CrawlStatus.DnsFailure, ex);
+                if (ex.InnerException is SocketException se &&
+                    (se.SocketErrorCode == SocketError.HostNotFound || se.SocketErrorCode == SocketError.TryAgain))
+                    throw new CrawlFailException(CrawlStatus.DnsFailure, ex);
+                switch (webex.StatusCode)
+                {
+                    case HttpStatusCode.TemporaryRedirect:
+                    case HttpStatusCode.Redirect:
+                    case HttpStatusCode.Moved:
+                        throw new CrawlFailException(CrawlStatus.Redirect, ex);
+                    case HttpStatusCode.NotFound:
+                        throw new CrawlFailException(CrawlStatus.Missing, ex);
+                    default:
+                        throw new CrawlFailException(CrawlStatus.Missing, ex);
+                }
+            }
+            if (ex is TaskCanceledException)
+                throw new CrawlFailException(CrawlStatus.Timeout, ex);
+            if (ex is TimeoutException)
+                throw new CrawlFailException(CrawlStatus.Timeout, ex);
+            if (ex is SocketException sock && sock.SocketErrorCode == SocketError.TimedOut)
+                throw new CrawlFailException(CrawlStatus.Timeout, ex);
+            throw new CrawlFailException(CrawlStatus.Missing, ex);
         }
 
 
         public async Task<Dictionary<string, int>> Start(string absolutePath, int maxPages, bool testOnly = false)
         {
+            Links.Clear();
+            Visited.Clear();
+            Uri startUri;
             try
             {
                 robotsLoaded = false;
-                host = new Uri(absolutePath).Host;
+                startUri = new Uri(absolutePath);
+                host = startUri.Host;
             }
-            catch (Exception ex)
+            catch (Exception urlEx)
             {
-                throw new CrawlFailException(CrawlStatus.UrlParsingError);
+                throw new CrawlFailException(CrawlStatus.UrlParsingError, urlEx);
             }
-            var robotsUrl = $"http://{host}/robots.txt";
+            // Match listing scheme so HTTPS-only / HSTS hosts are not probed over plain HTTP (often flaky from cloud IPs).
+            var robotsScheme = startUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+                ? Uri.UriSchemeHttps
+                : Uri.UriSchemeHttp;
+            var robotsUrl = $"{robotsScheme}://{host}/robots.txt";
             robots = new Robots("PAC Agent");
         
             try
@@ -63,42 +132,19 @@ namespace SavvyCrawler
                     await robots.LoadRobotsContent(downloadString);
                     robotsLoaded = true;
                 }
-            }catch(Exception ex)
+            }catch(Exception)
             {
                 //ignore:  Can't parse robots, then no restrictions
             }
             SetDefaultHeaders();
-            await FetchUrl(absolutePath, testOnly).ContinueWith(t =>
+            try
             {
-                if (t.Status == TaskStatus.Canceled) throw new CrawlFailException(CrawlStatus.Timeout);
-                if (t.Exception != null)
-                {
-                    var ex = (t.Exception as AggregateException).InnerException;
-                    if (ex is HttpRequestException)
-                    {
-                        var webex = ex as HttpRequestException;
-                        if (webex != null && webex.HttpRequestError == HttpRequestError.NameResolutionError)
-                            throw new CrawlFailException(CrawlStatus.DnsFailure);
-                        switch (webex.StatusCode)
-                        {
-                            case HttpStatusCode.TemporaryRedirect:
-                            case HttpStatusCode.Redirect:
-                            case HttpStatusCode.Moved:
-                                throw new CrawlFailException(CrawlStatus.Redirect);
-                            case HttpStatusCode.NotFound:
-                                throw new CrawlFailException(CrawlStatus.Missing);
-                            default:
-                                throw new CrawlFailException(CrawlStatus.Missing);
-                        }
-                    }
-                    if (ex is TimeoutException)
-                    {
-                        throw new CrawlFailException(CrawlStatus.Timeout);
-                    }
-                    
-
-                }
-            });
+                await FetchUrl(absolutePath, testOnly);
+            }
+            catch (Exception ex)
+            {
+                ThrowCrawlFail(ex);
+            }
             //get host and ignore non hosts
             if (testOnly) return new Dictionary<string, int> { };
 
@@ -109,7 +155,14 @@ namespace SavvyCrawler
                 {
                     maxPages--;
                     if (maxPages < 0) return counter.Terms;
-                    await FetchUrl(unvisitedLink, false);
+                    try
+                    {
+                        await FetchUrl(unvisitedLink, false);
+                    }
+                    catch (Exception ex)
+                    {
+                        ThrowCrawlFail(ex);
+                    }
                 }
             } while (unvisited.Count > 0);
             return counter.Terms;
@@ -119,14 +172,22 @@ namespace SavvyCrawler
         {
                 if (robotsLoaded)
                 {
-                    var disallowByDefault = robots?.GetDisallowedPaths()?.Any(u => u == "/") ?? false;
-                    if (disallowByDefault && !(robots?.IsPathAllowed(absolutePath) ?? true)) return;
+                    try
+                    {
+                        var disallowByDefault = robots?.GetDisallowedPaths()?.Any(u => u == "/") ?? false;
+                        if (disallowByDefault && !(robots?.IsPathAllowed(absolutePath) ?? true)) return;
+                    }
+                    catch (Exception)
+                    {
+                        // robots.txt was fetched and LoadRobotsContent did not throw, but some sites ship non-classic
+                        // content (e.g. legal boilerplate only). Querying rules can throw from the parser — crawl without filtering.
+                        robotsLoaded = false;
+                    }
                 }
 
                 var uri = new Uri(absolutePath);
                 var parts = uri.PathAndQuery.Split('?');
                 string text = "";
-                bool isHtml = false;
                 SetDefaultHeaders();
                 if (parts[0].EndsWith(".pdf"))
                 {
@@ -144,7 +205,6 @@ namespace SavvyCrawler
                 else
                 {
                     text = await ParseHtml(absolutePath);
-                    isHtml = true;
                 }
                 Visited.Add(absolutePath);
                 if (!testOnly)
@@ -161,9 +221,8 @@ namespace SavvyCrawler
         }
         public string StripScripts(string html)
         {
-            return html; //need the scripts for hungry plants
-            var scripts = new Regex(@"<script.*?</script>", RegexOptions.Singleline);
-            return scripts.Replace(html, "");
+            // Need the scripts for hungry plants - skip script stripping
+            return html;
         }
     }
 }

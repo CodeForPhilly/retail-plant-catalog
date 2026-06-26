@@ -34,5 +34,23 @@ export default {
     },
     async delData(url){
         return getRequest(url, "DELETE")
+    },
+    async downloadExport(url, filename) {
+        const response = await fetch(url, {
+            method: "GET",
+            mode: "cors",
+            cache: "no-cache",
+            credentials: "same-origin",
+            redirect: "manual"
+        });
+        if (!response.ok) throw new Error(response.statusText || "Export failed");
+        const blob = await response.blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = filename || "export.csv";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
     }
 }

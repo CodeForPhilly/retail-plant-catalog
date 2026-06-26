@@ -1,4 +1,4 @@
-﻿namespace Repositories;
+namespace Repositories;
 
 using Dapper;
 using Shared;
@@ -21,10 +21,71 @@ public class PlantRepository : Repository<Plant>
         conn.Execute("delete from vendor_plant where VendorId = @vendorId", new { vendorId });
     }
 
+    /// <summary>
+    /// Atomically replaces a vendor's plant associations: deletes the existing links and inserts the
+    /// given set inside a single transaction. The crawler calls this ONLY after a trustworthy crawl
+    /// produced results, so a failed or empty crawl can never wipe a vendor's catalog
+    /// (see <see cref="webapi.Services.PlantCrawler.Crawl"/>).
+    /// </summary>
+    public void ReplaceAssociations(string vendorId, IEnumerable<string> plantIds)
+    {
+        // Mirrors the connection-scoped transaction pattern in CrawlJobRepository: Dapper auto-opens
+        // for Query/Execute, but BeginTransaction needs the connection open already.
+        if (conn.State != ConnectionState.Open)
+            conn.Open();
+        using var tx = conn.BeginTransaction();
+        try
+        {
+            conn.Execute("delete from vendor_plant where VendorId = @vendorId", new { vendorId }, transaction: tx);
+            foreach (var plantId in plantIds)
+            {
+                conn.Execute(
+                    "insert into vendor_plant (PlantId, VendorId) values(@plantId, @vendorId) on duplicate key update PlantId = @plantId",
+                    new { plantId, vendorId }, transaction: tx);
+            }
+            tx.Commit();
+        }
+        catch
+        {
+            tx.Rollback();
+            throw;
+        }
+    }
+
+    /// <summary>Number of plant associations currently linked to a vendor.</summary>
+    public int CountAssociations(string vendorId)
+    {
+        return conn.ExecuteScalar<int>("select count(*) from vendor_plant where VendorId = @vendorId", new { vendorId });
+    }
+
     public IEnumerable<Plant> FindAllByName(string plantName)
     {
         var term = $"%{plantName}%";
         return conn.Query<Plant>("select * from plant p where p.ScientificName like @term or p.CommonName like @term order by p.ScientificName", new { term });
+    }
+
+    /// <summary>
+    /// List plants with optional name/scientificName filter and limit. Used by MCP and API.
+    /// </summary>
+    public IEnumerable<Plant> List(string? name = null, string? scientificName = null, int limit = 100)
+    {
+        var sql = "select * from plant p where 1=1";
+        var parameters = new DynamicParameters();
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            var nameTerm = $"%{name}%";
+            sql += " and (p.CommonName like @nameTerm or p.ScientificName like @nameTerm)";
+            parameters.Add("nameTerm", nameTerm);
+        }
+        if (!string.IsNullOrWhiteSpace(scientificName))
+        {
+            var sciTerm = $"%{scientificName}%";
+            sql += " and p.ScientificName like @sciTerm";
+            parameters.Add("sciTerm", sciTerm);
+        }
+        sql += " order by p.ScientificName limit @limit";
+        parameters.Add("limit", Math.Min(Math.Max(limit, 1), 500));
+        return conn.Query<Plant>(sql, parameters);
     }
 
     public IEnumerable<Plant> FindByVendor(string vendorId)
@@ -46,5 +107,35 @@ public class PlantRepository : Repository<Plant>
                       select ScientificName from plant union
                       select CommonName from plant";
         return conn.Query<string>(query).ToArray();
+    }
+
+    /// <summary>
+    /// Returns all vendor_plant rows, optionally filtered by vendor state/approved/deleted.
+    /// </summary>
+    public IEnumerable<VendorPlantExportRow> GetAllVendorPlant(string? state = null, bool? approved = null, bool includeDeleted = false)
+    {
+        if (string.IsNullOrEmpty(state) && approved == null)
+        {
+            return conn.Query<VendorPlantExportRow>("SELECT VendorId, PlantId FROM vendor_plant");
+        }
+        var sql = @"SELECT vp.VendorId, vp.PlantId FROM vendor_plant vp
+INNER JOIN vendor v ON v.Id = vp.VendorId
+WHERE 1=1";
+        var parameters = new DynamicParameters();
+        if (state != null && state != "ALL")
+        {
+            sql += " AND v.State = @state";
+            parameters.Add("state", state);
+        }
+        if (approved.HasValue)
+        {
+            sql += " AND v.Approved = @approved";
+            parameters.Add("approved", approved.Value);
+        }
+        if (!includeDeleted)
+        {
+            sql += " AND v.IsDeleted = false";
+        }
+        return conn.Query<VendorPlantExportRow>(sql, parameters);
     }
 }

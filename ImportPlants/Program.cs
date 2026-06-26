@@ -1,4 +1,4 @@
-﻿// See https://aka.ms/new-console-template for more information
+// See https://aka.ms/new-console-template for more information
 
 
 //Parse the JSON
@@ -19,6 +19,7 @@ var plantRepository = new PlantRepository(conn);
 
 await AssociatePlantsToVendors(vendorRepository, plantRepository);
 
+#pragma warning disable CS8321 // Unused local function - call when importing nurseries
 static void ParseNurseries(MySqlConnection conn)
 {
     var vendorRepository = new VendorRepository(conn);
@@ -32,6 +33,7 @@ static void ParseNurseries(MySqlConnection conn)
     {
         if (string.IsNullOrEmpty(line)) continue;
         var nursery = JsonConvert.DeserializeObject<Nursery>(line);
+        if (nursery == null) continue;
         var vendor = new Vendor
         {
             Id = Guid.NewGuid().ToString(),
@@ -56,6 +58,8 @@ static void ParseNurseries(MySqlConnection conn)
         }
     }
 }
+#pragma warning restore CS8321
+#pragma warning disable CS8321
 static void ParsePlants(MySqlConnection conn)
 {
     var plantRepository = new PlantRepository(conn);
@@ -74,10 +78,12 @@ static void ParsePlants(MySqlConnection conn)
     {
         if (string.IsNullOrEmpty(line)) continue;
         var plant = JsonConvert.DeserializeObject<Plant>(line);
+        if (plant == null) continue;
         plant.Id = Guid.NewGuid().ToString();
         plantRepository.Insert(plant);
     }
 }
+#pragma warning restore CS8321
 
 static async Task AssociatePlantsToVendors(VendorRepository vendorRepository, PlantRepository plantRepository)
 {
@@ -93,25 +99,26 @@ static async Task AssociatePlantsToVendors(VendorRepository vendorRepository, Pl
 
     foreach (var vendor in vendorRepository.GetAll())
     {
+        if (string.IsNullOrEmpty(vendor.Id)) continue;
         var v2 = vendorRepository.Get(vendor.Id);
+        if (v2 == null) continue;
         await Crawl(plantRepository, terms, plantLookup, v2);
-
     }
 }
 
 static async Task Crawl(PlantRepository plantRepository, string[] terms, Dictionary<string, string> plantLookup, Vendor v2)
 {
     var termCounter = new TermCounter(terms);
-    var crawler = new Crawler(termCounter);
     if (v2.PlantListingUrls != null)
     {
         foreach (var uri in v2.PlantListingUrls.Distinct())
         {
-            await crawler.Start(uri, 1);
+            using (var crawler = new Crawler(termCounter))
+                await crawler.Start(uri, 1);
             var termsFound = termCounter.Terms.Where(t => t.Value > 0).Select(t => t.Key);
             foreach (var term in termsFound)
             {
-                var plantId = plantLookup[term];
+                if (!plantLookup.TryGetValue(term, out var plantId) || string.IsNullOrEmpty(v2.Id)) continue;
                 plantRepository.Associate(plantId, v2.Id);
             }
         }

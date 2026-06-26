@@ -1,15 +1,11 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using System.Security.Principal;
 
 namespace webapi.Controllers;
 
 public class BaseController : ControllerBase
 {
-    public IIdentity CurrentUser {  get
-        {
-            return HttpContext.User.Identity;
-        }
-    }
+    public IIdentity? CurrentUser => HttpContext.User.Identity;
     public string UserId
     {
         get

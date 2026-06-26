@@ -38,6 +38,12 @@ public class CreateVendorRequest
 
     public bool AllNative { get; init; }
 
+    /// <summary>True if vendor sells live plants. Default true when not populated.</summary>
+    public bool LivePlant { get; init; } = true;
+
+    /// <summary>True if vendor sells seed.</summary>
+    public bool Seed { get; init; }
+
     public string Notes { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "At least one PlantListingUrl is required.")]

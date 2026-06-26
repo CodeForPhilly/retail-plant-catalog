@@ -19,6 +19,9 @@
       <a id="api-link" target="_blank" href="/swagger/index.html">
         View API Documentation</a
       >
+      <a id="mcp-setup-link" target="_blank" href="/docs/MCP-Claude-Code-setup.html">
+        Set up MCP with Claude Code (mcp.json)</a
+      >
     </div>
   </div>
 </template>
@@ -80,10 +83,11 @@ export default Vue.extend({
 });
 </script>
 <style scoped>
-#api-link {
-  margin: auto;
+#api-link,
+#mcp-setup-link {
+  margin: 8px auto;
   display: block;
-  width: 200px;
+  width: 280px;
   color: #01573e;
 }
 #api-holder {

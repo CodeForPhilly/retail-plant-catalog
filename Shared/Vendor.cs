@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 using Dapper.Contrib.Extensions;
 namespace Shared
 {
@@ -55,6 +55,34 @@ namespace Shared
         public DateTime? LastChanged { get; set; }
 
         public CrawlStatus LastCrawlStatus {get;set;} = CrawlStatus.None;
+
+        /// <summary>
+        /// True while a crawl is in progress for this vendor (prevents concurrent crawls and drives UI inactive state).
+        /// </summary>
+        public bool CrawlInProgress { get; set; } = false;
+
+        /// <summary>
+        /// True if vendor sells live plants. Default true when not populated (assumption).
+        /// </summary>
+        public bool LivePlant { get; set; } = true;
+
+        /// <summary>
+        /// True if vendor sells seed.
+        /// </summary>
+        public bool Seed { get; set; } = false;
+
+        /// <summary>
+        /// Optional partner directory this vendor belongs to (e.g. "Xerces"). FK to partner.Id.
+        /// Null = unaffiliated. Paired with <see cref="ExternalKey"/> to form a unique import key.
+        /// </summary>
+        public string? Partner { get; set; }
+
+        /// <summary>
+        /// The partner-side identifier for this vendor. For partners that supply no native ID
+        /// (e.g. Xerces), this is a deterministic hash derived in the sync skill from the
+        /// natural key (typically normalized name + state). Unique with Partner.
+        /// </summary>
+        public string? ExternalKey { get; set; }
 
     }
 

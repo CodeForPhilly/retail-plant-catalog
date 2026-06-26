@@ -12,6 +12,12 @@
         ><input type="checkbox" v-model="vendor.allNative" />All Native
         Nursery?</label
       ><br />
+      <label
+        ><input type="checkbox" v-model="vendor.livePlant" />Live Plant</label
+      >
+      <label style="margin-left: 1em"
+        ><input type="checkbox" v-model="vendor.seed" />Seed</label
+      ><br />
       <label>
         <input
           type="text"
@@ -58,7 +64,13 @@
           type="text"
           placeholder="Plant Inventory URL"
           v-model="plantListingUrl"
+          :class="{ 'input-duplicate': isDuplicatePlantUrl }"
+          @input="onPlantUrlInput"
       /></label>
+      <span v-if="isDuplicatePlantUrl" class="duplicate-feedback">
+        <span class="material-symbols-outlined">warning</span>
+        This URL is already in your list
+      </span>
       <a @click="addUrl">
         <span class="material-symbols-outlined"> add_box </span>
       </a>
@@ -69,12 +81,17 @@
           cancel
         </span>
       </div>
+      <p v-if="vendor.id" class="last-crawl-info">
+        {{ prettyDate('Last crawled: ', vendor.lastCrawled) }}
+      </p>
       <div
         class="urls"
         v-for="(v, k) in vendor.plantListingUris"
         v-bind:key="k"
       >
         {{ v.uri }}
+        <span v-if="v.crawlInProgress" class="material-symbols-outlined url-spinner" title="Crawl in progress">sync</span>
+        <span v-if="v.plantCount != null" class="url-plant-count" :title="v.plantCount + ' plants found on last crawl'">{{ v.plantCount }} plants</span>
         <span class="material-symbols-outlined" @click="removeUrl(v)">
           disabled_by_default
         </span>
@@ -98,7 +115,7 @@
           :title="
             prettyDate('Last failed crawl:', v.lastFailed) +
             '\n' +
-            prettyDate('Last successed crawl:', v.lastSucceeded)
+            prettyDate('Last succeeded crawl:', v.lastSucceeded)
           "
         >
           <span class="material-symbols-outlined">error</span>
@@ -126,6 +143,42 @@
           </li>
         </ul>
       </div>
+      <div
+        class="partner-box"
+        v-if="vendor.id && (role == 'Admin' || role == 'VolunteerPlus')"
+      >
+        <h3>Partner Directory</h3>
+        <p class="partner-help">
+          Tag this nursery as belonging to a partner directory (e.g. Xerces).
+          Used for partner-filtered exports. Leave as “None” for unaffiliated.
+        </p>
+        <label class="partner-field">
+          <span class="partner-field-label">Partner</span>
+          <select v-model="selectedPartner" class="partner-select">
+            <option value="">None (unaffiliated)</option>
+            <option v-for="p in partners" :key="p.id" :value="p.id">
+              {{ p.displayName }}
+            </option>
+          </select>
+        </label>
+        <label class="partner-field">
+          <span class="partner-field-label">External Key</span>
+          <input
+            type="text"
+            v-model="selectedExternalKey"
+            placeholder="Partner-side id (optional)"
+            class="partner-extkey"
+            :disabled="!selectedPartner"
+          />
+        </label>
+        <input
+          type="button"
+          class="primary-btn partner-save-btn"
+          value="Save Partner"
+          @click="savePartner()"
+        />
+        <span v-if="partnerStatus" class="partner-status">{{ partnerStatus }}</span>
+      </div>
       <textarea v-model="vendor.notes" placeholder="Notes"> </textarea><br />
       <input
         type="button"
@@ -142,14 +195,7 @@
         :disabled="crawlInProgress"
         value="Crawl Site(s)"
       />
-      <img
-        src="/loading.gif"
-        alt="crawl in progress"
-        v-if="crawlInProgress"
-        width="30"
-        height="30"
-        style="position: relative; top: 5px; left: 5px"
-      />
+      <span v-if="crawlInProgress" class="material-symbols-outlined crawl-spinner" title="Crawl in progress">sync</span>
       <input
         type="button"
         class="primary-btn save"
@@ -188,8 +234,9 @@ export default Vue.extend({
             publicEmail: "",
             publicPhone: "",
             state:"",
-            plantListingUrls: [
-            ]
+            plantListingUrls: [],
+            livePlant: true,
+            seed: false
            },
            crawlInProgress: false,
            lat:0,
@@ -199,8 +246,19 @@ export default Vue.extend({
            countries: ["US"],
            agreeToTerms: false,
            error:"",
-           errors:[]
+           errors:[],
+           isDuplicatePlantUrl: false,
+           partners: [],
+           selectedPartner: "",
+           selectedExternalKey: "",
+           partnerStatus: ""
         };
+    },
+    computed: {
+        normalizedExistingPlantUrls() {
+            if (!this.vendor.plantListingUris || !this.vendor.plantListingUris.length) return [];
+            return this.vendor.plantListingUris.map(u => this.normalizeUrl(u.uri));
+        }
     },
     async mounted() {
               // Check authentication first
@@ -222,6 +280,9 @@ export default Vue.extend({
                 .then(json => {
                     console.log(json)
                     this.vendor = json;
+                    this.crawlInProgress = !!(json && json.crawlInProgress);
+                    if (this.vendor.livePlant === undefined || this.vendor.livePlant === null) this.vendor.livePlant = true;
+                    if (this.vendor.seed === undefined || this.vendor.seed === null) this.vendor.seed = false;
                 });
             }
         }else{
@@ -229,6 +290,9 @@ export default Vue.extend({
             .then(json => {
                 console.log(json)
                 this.vendor = json;
+                this.crawlInProgress = !!(json && json.crawlInProgress);
+                if (this.vendor.livePlant === undefined || this.vendor.livePlant === null) this.vendor.livePlant = true;
+                if (this.vendor.seed === undefined || this.vendor.seed === null) this.vendor.seed = false;
             });
         }
         if (id){
@@ -238,38 +302,95 @@ export default Vue.extend({
                 this.plants = json
             })
         }
+        if (this.role == 'Admin' || this.role == 'VolunteerPlus') {
+            this.selectedPartner = this.vendor.partner || "";
+            this.selectedExternalKey = this.vendor.externalKey || "";
+            await this.loadPartners();
+        }
     },
     methods: {
+        async loadPartners(){
+            try {
+                const list = await utils.getData('/vendor/Partners');
+                this.partners = Array.isArray(list) ? list : [];
+            } catch (e) {
+                this.partners = [];
+            }
+        },
+        async savePartner(){
+            this.partnerStatus = "Saving...";
+            // Clearing the partner also clears the external key so we never leave a dangling key.
+            var extKey = this.selectedPartner ? this.selectedExternalKey : "";
+            try {
+                const result = await utils.postData('/vendor/SetPartner', {
+                    vendorId: this.vendor.id,
+                    partner: this.selectedPartner,
+                    externalKey: extKey
+                });
+                if (result && result.success){
+                    this.vendor.partner = this.selectedPartner || null;
+                    this.vendor.externalKey = extKey || null;
+                    this.selectedExternalKey = extKey;
+                    this.partnerStatus = this.selectedPartner
+                        ? ("Saved — tagged as " + this.selectedPartner)
+                        : "Saved — partner link cleared";
+                } else {
+                    this.partnerStatus = (result && result.message) ? result.message : "Could not save partner link.";
+                }
+            } catch (e) {
+                this.partnerStatus = "Error saving partner link.";
+            }
+        },
         prettyDate(prefix, date){
             if (!date) {
                 return prefix + " Never";
             }
-            var d = new Date(date);
-            if (d.getFullYear() == 1){
+            // Treat server UTC date as UTC: if ISO string has no timezone, append Z so browser parses as UTC
+            var isoNoTz = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}T\d/.test(date) && !/Z$/.test(date) && !/[+-]\d{2}:?\d{2}$/.test(date);
+            var dateStr = isoNoTz ? date.replace(/\.\d{3}$/, '') + 'Z' : date;
+            var d = new Date(dateStr);
+            if (isNaN(d.getTime()) || d.getFullYear() === 1){
                 return prefix + " Never";
             }
-            return prefix + " " + d.toLocaleDateString() + " " + d.toLocaleTimeString();
+            // Format in browser's local timezone
+            var opts = { dateStyle: 'short', timeStyle: 'short', hour12: true };
+            return prefix + " " + d.toLocaleString(undefined, opts);
+        },
+        buildVendorPayload() {
+            var uris = (this.vendor.plantListingUris || []).map(function(u) { return u.uri; });
+            return Object.assign({}, this.vendor, { plantListingUrls: uris });
         },
         async submit(){
             var didValidate = await this.validate();
             if (!didValidate) return;
             console.log(this.vendor)
+            var payload = this.buildVendorPayload();
             if (this.vendor.id == undefined){
-                var result = await utils.postData("/vendor/createclient", this.vendor)
+                var result = await utils.postData("/vendor/createclient", payload)
                 if (result.success)
                     window.location = result.redirectUrl
+                else if (result.message)
+                    this.error = result.message
             }else{
                 console.log("before updateclient")
-                var updateResult = await utils.putData("/vendor/updateclient", this.vendor  )
-                window.location = updateResult.redirectUrl
+                var updateResult = await utils.putData("/vendor/updateclient", payload)
+                if (updateResult.message && !updateResult.redirectUrl)
+                    this.error = updateResult.message
+                else
+                    window.location = updateResult.redirectUrl
             }
 
         },
         async crawl(){
             this.crawlInProgress = true;
-            await utils.postData("/vendor/crawl?id=" + this.vendor.id)
-            this.crawlInProgress = false;
-            window.location = "/#/vendors"
+            try {
+              await utils.postData("/vendor/crawlByID?id=" + this.vendor.id);
+              window.location = "/#/vendors";
+            } catch (e) {
+              this.error = e.message || "Crawl request failed.";
+            } finally {
+              this.crawlInProgress = false;
+            }
         },
         closeError(){
             this.error = ""
@@ -277,6 +398,25 @@ export default Vue.extend({
         prependHttp(){
             if (this.vendor.storeUrl && this.vendor.storeUrl.indexOf("http") < 0)
                 this.vendor.storeUrl = "https://" + this.vendor.storeUrl;
+        },
+        normalizeUrl(url) {
+            if (!url || typeof url !== 'string') return '';
+            var s = url.trim().toLowerCase();
+            try {
+                var u = new URL(s);
+                return u.href;
+            } catch (_) {
+                return s;
+            }
+        },
+        onPlantUrlInput() {
+            this.isDuplicatePlantUrl = this.checkIsDuplicatePlantUrl(this.plantListingUrl);
+        },
+        checkIsDuplicatePlantUrl(url) {
+            if (!url || !url.trim()) return false;
+            var normalized = this.normalizeUrl(url);
+            if (!normalized) return false;
+            return this.normalizedExistingPlantUrls.some(existing => existing === normalized);
         },
         async validate(){
             console.log("validate", this.vendor)
@@ -314,6 +454,15 @@ export default Vue.extend({
             if (this.vendor.plantListingUris == null || this.vendor.plantListingUris.length === 0){
                 this.errors.push("There must be at least one Plant Listing URL.  Be sure to hit the add button")
             }else{
+                var seen = new Set();
+                for (var u of this.vendor.plantListingUris){
+                    var n = this.normalizeUrl(u.uri);
+                    if (seen.has(n)){
+                        this.errors.push("Duplicate Plant Listing URL is not allowed: " + u.uri);
+                        break;
+                    }
+                    seen.add(n);
+                }
                 console.log("listing urls breakpoint")
                 for (var uri of this.vendor.plantListingUris){
                     console.log("Evaluating url: " + uri)
@@ -332,6 +481,7 @@ export default Vue.extend({
         },
         async addUrl(){
            this.error = "";
+           this.isDuplicatePlantUrl = false;
            if (!this.plantListingUrl){
             this.error = "Must enter url before adding!"
             return;
@@ -345,9 +495,11 @@ export default Vue.extend({
             if (!this.vendor.plantListingUris) {
              this.vendor.plantListingUris = [];
            }
-           var dup = this.vendor.plantListingUris.filter(u => u.uri == this.plantListingUrl);
-           if (dup.length > 0){
-            this.error = "Cannot enter a duplicate url."
+           var normalizedInput = this.normalizeUrl(this.plantListingUrl);
+           var isDup = this.vendor.plantListingUris.some(u => this.normalizeUrl(u.uri) === normalizedInput);
+           if (isDup){
+            this.error = "This URL is already in your list. Cannot add a duplicate.";
+            this.isDuplicatePlantUrl = true;
             return;
            }
 
@@ -364,6 +516,12 @@ export default Vue.extend({
                 });
 
                 console.log("Test result:", testResult);
+
+                if (testResult.success === false && testResult.message && testResult.message.indexOf('already registered') !== -1) {
+                  this.error = testResult.message;
+                  this.isDuplicatePlantUrl = true;
+                  return;
+                }
 
                 // Add URL with test result status
                 const newUrl = {
@@ -443,6 +601,7 @@ export default Vue.extend({
            }
 
            this.plantListingUrl = "";
+           this.isDuplicatePlantUrl = false;
         },
         removeUrl(v){
             if (confirm("Are you sure you want to remove this url? " + v.uri)){
@@ -581,6 +740,46 @@ span.material-symbols-outlined {
 #MazPhoneNumberInput input[type="text"] {
   font-size: 1.2em;
 }
+.input-duplicate {
+  border: 2px solid #dc3545;
+  background-color: #fff5f5;
+}
+.duplicate-feedback {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #dc3545;
+  font-size: 0.9em;
+  margin-left: 8px;
+}
+.duplicate-feedback .material-symbols-outlined {
+  font-size: 18px;
+  position: static;
+}
+.last-crawl-info {
+  margin: 8px 0 8px 30px;
+  font-size: 0.95em;
+  color: #555;
+}
+.url-spinner,
+.crawl-spinner {
+  vertical-align: middle;
+  animation: spin 1s linear infinite;
+}
+.crawl-spinner {
+  margin-left: 8px;
+  position: relative;
+  top: 2px;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.url-plant-count {
+  margin-left: 8px;
+  font-size: 0.9em;
+  color: #2e7d32;
+}
 .urls {
   padding-left: 30px;
   padding-bottom: 5px;
@@ -595,5 +794,52 @@ span.material-symbols-outlined {
 }
 div.autocomplete-icon gmp-place-autocomplete{
   background-color: #fff !important;
+}
+.partner-box {
+  margin: 20px 13px;
+  padding: 15px 18px;
+  background: #fff;
+  border: 1px solid #c1c1c1;
+  border-radius: 8px;
+}
+.partner-box h3 {
+  margin: 0 0 4px 0;
+  color: #01573e;
+}
+.partner-help {
+  margin: 0 0 12px 0;
+  font-size: 0.9em;
+  color: #6a6a6a;
+}
+.partner-field {
+  display: block;
+  margin-bottom: 10px;
+}
+.partner-field-label {
+  display: inline-block;
+  width: 110px;
+  color: #707070;
+  vertical-align: middle;
+}
+.partner-select {
+  font-size: 1.1em;
+  padding: 6px 12px;
+  border-radius: 5px;
+  border: 1px solid #c1c1c1;
+  color: #707070;
+  min-width: 260px;
+}
+.partner-extkey {
+  width: 260px !important;
+  margin: 0 !important;
+}
+.partner-save-btn {
+  font-size: 1em;
+  padding: 7px 18px;
+}
+.partner-status {
+  margin-left: 12px;
+  font-size: 0.95em;
+  color: #01573e;
 }
 </style>

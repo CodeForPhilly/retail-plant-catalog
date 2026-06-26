@@ -1,0 +1,13 @@
+---
+description: Append-only DB schema changes — never rewrite shipped migrations or _base.sql
+alwaysApply: true
+---
+
+# Database migrations
+
+- **Do not edit** existing files under `migrations/` (including timestamped `.sql` files once they exist in the repo).
+- **Do not edit** `migrations/_base.sql` to reflect new schema; treat it as a historical or baseline snapshot unless the team explicitly owns bulk updates elsewhere.
+- **Always add a new** timestamped migration file for any schema change (new tables, columns, indexes, data backfills).
+- Prefer **idempotent** or **safe-to-re-run** patterns in new migrations when practical (e.g. check `information_schema` before `ADD COLUMN`), so partially applied environments do not break.
+
+If a past migration was wrong, **do not rewrite it**; fix forward with a new migration (and document any manual cleanup if unavoidable).
